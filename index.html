@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#071211" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="preconnect" href="https://api.maptiler.com" crossorigin />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta
       name="description"
@@ -16,10 +18,7 @@
       <header class="topbar">
         <a class="brand" href="./" aria-label="Gaussian Viewer home">
           <span class="brand-mark" aria-hidden="true"></span>
-          <span>
-            <strong>Gaussian</strong>
-            <small>VIEWER</small>
-          </span>
+          <strong>Gaussian Viewer</strong>
         </a>
 
         <div class="topbar-actions">
@@ -28,22 +27,12 @@
             <span id="connection-label">Initializing</span>
           </div>
           <button id="share-button" class="button button-primary" type="button">
-            Share view
+            Share
           </button>
         </div>
       </header>
 
       <main class="dashboard">
-        <section class="intro-panel">
-          <div>
-            <p class="eyebrow">MY 3D CAPTURE</p>
-            <h1>Explore my captured world.</h1>
-            <p class="lede">
-              An interactive Gaussian reconstruction of my captured location.
-            </p>
-          </div>
-        </section>
-
         <section class="viewer-card" aria-label="Interactive 3D model viewer">
           <div id="map" class="map"></div>
 
@@ -66,8 +55,8 @@
 
           <div class="viewer-toolbar">
             <label class="select-control">
-              <span>BASEMAP</span>
-              <select id="basemap-select">
+              <span class="visually-hidden">Basemap</span>
+              <select id="basemap-select" aria-label="Basemap">
                 <option value="hybrid-v4">Hybrid</option>
                 <option value="satellite-v4">Satellite</option>
                 <option value="streets-v4">Streets</option>
@@ -83,12 +72,7 @@
             </button>
           </div>
 
-          <div class="viewer-hint">
-            <span>Drag to orbit</span>
-            <span>Keep scrolling for 32× close-up</span>
-          </div>
         </section>
-
       </main>
 
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
