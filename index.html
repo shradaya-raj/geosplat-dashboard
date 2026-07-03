@@ -9,16 +9,16 @@
       name="description"
       content="Interactive georeferenced Gaussian splat viewer"
     />
-    <title>GeoSplat Observatory</title>
+    <title>Gaussian Viewer</title>
   </head>
   <body>
     <div id="app">
       <header class="topbar">
-        <a class="brand" href="./" aria-label="GeoSplat Observatory home">
+        <a class="brand" href="./" aria-label="Gaussian Viewer home">
           <span class="brand-mark" aria-hidden="true"></span>
           <span>
-            <strong>GeoSplat</strong>
-            <small>OBSERVATORY</small>
+            <strong>Gaussian</strong>
+            <small>VIEWER</small>
           </span>
         </a>
 
@@ -36,28 +36,12 @@
       <main class="dashboard">
         <section class="intro-panel">
           <div>
-            <p class="eyebrow">GEOSPATIAL DIGITAL TWIN</p>
-            <h1>Explore the captured world.</h1>
+            <p class="eyebrow">MY 3D CAPTURE</p>
+            <h1>Explore my captured world.</h1>
             <p class="lede">
-              A photorealistic Gaussian reconstruction, precisely aligned with
-              its real-world terrain.
+              An interactive Gaussian reconstruction of my captured location.
             </p>
           </div>
-
-          <dl class="model-facts">
-            <div>
-              <dt>MODEL</dt>
-              <dd title="019f266c-4b5c-7c93-92a6-d59287b2f7cb">019f266c…f7cb</dd>
-            </div>
-            <div>
-              <dt>RENDERER</dt>
-              <dd>WebGPU</dd>
-            </div>
-            <div>
-              <dt>STATUS</dt>
-              <dd id="model-status">Waiting</dd>
-            </div>
-          </dl>
         </section>
 
         <section class="viewer-card" aria-label="Interactive 3D model viewer">
@@ -91,24 +75,20 @@
               </select>
             </label>
 
-            <button id="reset-view" class="icon-button" type="button" title="Frame model">
+            <button id="reset-view" class="icon-button" type="button" title="Frame model" disabled>
               Frame model
             </button>
-            <button id="close-up" class="icon-button" type="button" title="Jump to maximum zoom">
-              Close-up
+            <button id="close-up" class="icon-button" type="button" title="Zoom closer than the map limit" disabled>
+              Zoom closer
             </button>
           </div>
 
           <div class="viewer-hint">
             <span>Drag to orbit</span>
-            <span>Scroll to zoom</span>
+            <span>Keep scrolling for 32× close-up</span>
           </div>
         </section>
 
-        <footer class="footer">
-          <span>Interactive model hosted with MapTiler GeoSplats</span>
-          <span>Best experienced in a WebGPU-compatible browser</span>
-        </footer>
       </main>
 
       <div id="toast" class="toast" role="status" aria-live="polite"></div>

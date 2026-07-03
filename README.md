@@ -1,8 +1,6 @@
-# GeoSplat Observatory
+# Gaussian Viewer
 
-A static, GitHub Pages-ready dashboard for the georeferenced MapTiler model:
-
-`019f266c-4b5c-7c93-92a6-d59287b2f7cb`
+A private-brand, GitHub Pages-ready dashboard for an interactive Gaussian model.
 
 ## Run locally
 

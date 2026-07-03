@@ -4,11 +4,11 @@ import "./style.css";
 
 const MODEL_ID = "019f266c-4b5c-7c93-92a6-d59287b2f7cb";
 const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
-const MAX_ZOOM = 24;
+const MAX_ZOOM = 22;
+const MAX_MAGNIFICATION = 32;
 const LOADING_FALLBACK_MS = 4000;
 
 const connectionLabel = document.querySelector("#connection-label");
-const modelStatus = document.querySelector("#model-status");
 const loadingPanel = document.querySelector("#loading-panel");
 const loadingTitle = document.querySelector("#loading-title");
 const loadingDetail = document.querySelector("#loading-detail");
@@ -25,13 +25,34 @@ let loadingFallback;
 let userHasMoved = false;
 let modelIsInteractive = false;
 let modelLoadFailed = false;
+let baseModelScale = null;
+let magnification = 1;
 
 function setStatus(label, detail, state = "loading") {
   connectionLabel.textContent = label;
-  modelStatus.textContent = label;
   loadingTitle.textContent = label;
   loadingDetail.textContent = detail;
   document.documentElement.dataset.state = state;
+}
+
+function captureBaseModelScale() {
+  if (baseModelScale !== null) return true;
+
+  const scale = splatModel?.getScale();
+  if (!Number.isFinite(scale) || scale <= 0) return false;
+  baseModelScale = scale;
+  return true;
+}
+
+function setMagnification(value) {
+  if (!captureBaseModelScale()) return false;
+
+  magnification = Math.min(MAX_MAGNIFICATION, Math.max(1, value));
+  splatModel.setScale(baseModelScale * magnification);
+  closeUpButton.textContent = magnification > 1
+    ? `Zoom closer · ${magnification.toFixed(magnification < 10 ? 1 : 0)}×`
+    : "Zoom closer";
+  return true;
 }
 
 function showToast(message) {
@@ -50,7 +71,7 @@ function dismissLoadingPanel() {
 
 async function shareDashboard() {
   const shareData = {
-    title: "GeoSplat Observatory",
+    title: "Gaussian Viewer",
     text: "Explore this interactive georeferenced 3D model.",
     url: window.location.href
   };
@@ -76,6 +97,7 @@ async function startDashboard() {
     loadingPanel.hidden = true;
     basemapSelect.disabled = true;
     resetButton.disabled = true;
+    closeUpButton.disabled = true;
     return;
   }
 
@@ -99,6 +121,7 @@ async function startDashboard() {
     loadingPanel.classList.add("is-error");
     basemapSelect.disabled = true;
     resetButton.disabled = true;
+    closeUpButton.disabled = true;
     return;
   }
 
@@ -124,11 +147,12 @@ async function startDashboard() {
 
     splatModel.once("load", () => {
       modelIsInteractive = true;
+      captureBaseModelScale();
       if (!userHasMoved) splatModel.fit();
       setStatus("Live", "Model ready", "ready");
       dismissLoadingPanel();
       resetButton.disabled = false;
-      closeUpButton.disabled = false;
+      closeUpButton.disabled = !captureBaseModelScale();
     });
 
     splatModel.once("error", () => {
@@ -144,6 +168,13 @@ async function startDashboard() {
 
     map.addSplatModel(splatModel);
 
+    const scaleProbe = window.setInterval(() => {
+      if (!captureBaseModelScale()) return;
+      closeUpButton.disabled = false;
+      window.clearInterval(scaleProbe);
+    }, 250);
+    window.setTimeout(() => window.clearInterval(scaleProbe), 30000);
+
     // Renderable splats often appear before every detail tile has finished
     // streaming. Do not keep the viewer covered while that continues.
     loadingFallback = window.setTimeout(() => {
@@ -153,7 +184,7 @@ async function startDashboard() {
       setStatus("Live", "High-detail tiles are streaming", "ready");
       dismissLoadingPanel();
       resetButton.disabled = false;
-      closeUpButton.disabled = false;
+      closeUpButton.disabled = !captureBaseModelScale();
     }, LOADING_FALLBACK_MS);
   });
 
@@ -173,7 +204,9 @@ async function startDashboard() {
   });
 
   resetButton.addEventListener("click", () => {
-    if (splatModel) splatModel.fit();
+    if (!splatModel) return;
+    setMagnification(1);
+    splatModel.fit();
   });
 
   closeUpButton.addEventListener("click", () => {
@@ -181,13 +214,22 @@ async function startDashboard() {
     if (!center) return;
 
     userHasMoved = true;
+    const nextMagnification = Math.min(
+      MAX_MAGNIFICATION,
+      magnification === 1 ? 2 : magnification * 2
+    );
+    setMagnification(nextMagnification);
     map.jumpTo({
       center,
       zoom: MAX_ZOOM,
       pitch: 65,
       bearing: map.getBearing()
     });
-    showToast(`Maximum zoom: ${MAX_ZOOM}`);
+    showToast(
+      magnification === MAX_MAGNIFICATION
+        ? `Maximum close-up: ${MAX_MAGNIFICATION}×`
+        : `Close-up: ${magnification}×`
+    );
   });
 
   document.querySelector("#map").addEventListener("pointerdown", () => {
@@ -196,10 +238,24 @@ async function startDashboard() {
 
   document.querySelector("#map").addEventListener(
     "wheel",
-    () => {
+    (event) => {
       userHasMoved = true;
+
+      const atMapZoomLimit = map.getZoom() >= map.getMaxZoom() - 0.15;
+      const zoomingIn = event.deltaY < 0;
+      const zoomingOutFromMagnification = event.deltaY > 0 && magnification > 1;
+
+      if ((zoomingIn && atMapZoomLimit) || zoomingOutFromMagnification) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const factor = Math.exp(Math.min(Math.abs(event.deltaY) * 0.003, 0.35));
+        setMagnification(
+          zoomingIn ? magnification * factor : magnification / factor
+        );
+      }
     },
-    { passive: true }
+    { passive: false, capture: true }
   );
 }
 
