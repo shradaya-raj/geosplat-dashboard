@@ -202,6 +202,13 @@ h1 {
   height: 100%;
 }
 
+.map canvas {
+  transform: scale(var(--viewer-magnification, 1));
+  transform-origin: center;
+  transition: transform 100ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
 .setup-message,
 .loading-panel {
   position: absolute;
