@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071211" />
+    <meta
+      name="description"
+      content="Interactive georeferenced Gaussian splat viewer"
+    />
+    <title>GeoSplat Observatory</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="GeoSplat Observatory home">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>
+            <strong>GeoSplat</strong>
+            <small>OBSERVATORY</small>
+          </span>
+        </a>
+
+        <div class="topbar-actions">
+          <div class="live-pill">
+            <span class="live-dot"></span>
+            <span id="connection-label">Initializing</span>
+          </div>
+          <button id="share-button" class="button button-primary" type="button">
+            Share view
+          </button>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="intro-panel">
+          <div>
+            <p class="eyebrow">GEOSPATIAL DIGITAL TWIN</p>
+            <h1>Explore the captured world.</h1>
+            <p class="lede">
+              A photorealistic Gaussian reconstruction, precisely aligned with
+              its real-world terrain.
+            </p>
+          </div>
+
+          <dl class="model-facts">
+            <div>
+              <dt>MODEL</dt>
+              <dd title="019f266c-4b5c-7c93-92a6-d59287b2f7cb">019f266c…f7cb</dd>
+            </div>
+            <div>
+              <dt>RENDERER</dt>
+              <dd>WebGPU</dd>
+            </div>
+            <div>
+              <dt>STATUS</dt>
+              <dd id="model-status">Waiting</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="viewer-card" aria-label="Interactive 3D model viewer">
+          <div id="map" class="map"></div>
+
+          <div id="setup-message" class="setup-message" hidden>
+            <span class="setup-icon">!</span>
+            <div>
+              <strong>MapTiler key required</strong>
+              <p>
+                Add <code>VITE_MAPTILER_API_KEY</code> to your local environment
+                or GitHub Actions secret, then rebuild the dashboard.
+              </p>
+            </div>
+          </div>
+
+          <div id="loading-panel" class="loading-panel">
+            <span class="loader"></span>
+            <strong id="loading-title">Preparing terrain</strong>
+            <span id="loading-detail">Connecting to the 3D scene…</span>
+          </div>
+
+          <div class="viewer-toolbar">
+            <label class="select-control">
+              <span>BASEMAP</span>
+              <select id="basemap-select">
+                <option value="hybrid-v4">Hybrid</option>
+                <option value="satellite-v4">Satellite</option>
+                <option value="streets-v4">Streets</option>
+                <option value="dataviz-v4">Data</option>
+              </select>
+            </label>
+
+            <button id="reset-view" class="icon-button" type="button" title="Frame model">
+              Frame model
+            </button>
+          </div>
+
+          <div class="viewer-hint">
+            <span>Drag to orbit</span>
+            <span>Scroll to zoom</span>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <span>Interactive model hosted with MapTiler GeoSplats</span>
+          <span>Best experienced in a WebGPU-compatible browser</span>
+        </footer>
+      </main>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
