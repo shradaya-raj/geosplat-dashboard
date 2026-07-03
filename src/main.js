@@ -15,6 +15,7 @@ const loadingTitle = document.querySelector("#loading-title");
 const loadingDetail = document.querySelector("#loading-detail");
 const setupMessage = document.querySelector("#setup-message");
 const mapElement = document.querySelector("#map");
+const viewerCard = document.querySelector(".viewer-card");
 const basemapSelect = document.querySelector("#basemap-select");
 const resetButton = document.querySelector("#reset-view");
 const closeUpButton = document.querySelector("#close-up");
@@ -275,20 +276,29 @@ async function startDashboard() {
     userHasMoved = true;
   });
 
-  mapElement.addEventListener(
+  viewerCard.addEventListener(
     "wheel",
     (event) => {
+      if (event.target.closest("button, select")) return;
+
       userHasMoved = true;
 
-      const atMapZoomLimit = map.getZoom() >= map.getMaxZoom() - 0.15;
+      const currentZoom = map.getZoom();
+      const nearMapZoomLimit = currentZoom >= map.getMaxZoom() - 2;
       const zoomingIn = event.deltaY < 0;
       const zoomingOutFromMagnification = event.deltaY > 0 && magnification > 1;
 
-      if ((zoomingIn && atMapZoomLimit) || zoomingOutFromMagnification) {
+      if ((zoomingIn && nearMapZoomLimit) || zoomingOutFromMagnification) {
         event.preventDefault();
         event.stopPropagation();
 
-        const factor = Math.exp(Math.min(Math.abs(event.deltaY) * 0.003, 0.35));
+        const deltaMultiplier = event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? window.innerHeight
+            : 1;
+        const normalizedDelta = Math.abs(event.deltaY) * deltaMultiplier;
+        const factor = Math.exp(Math.min(normalizedDelta * 0.003, 0.35));
         setMagnification(
           zoomingIn ? magnification * factor : magnification / factor
         );
