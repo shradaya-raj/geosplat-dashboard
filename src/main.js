@@ -4,6 +4,8 @@ import "./style.css";
 
 const MODEL_ID = "019f266c-4b5c-7c93-92a6-d59287b2f7cb";
 const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
+const MAX_ZOOM = 24;
+const LOADING_FALLBACK_MS = 4000;
 
 const connectionLabel = document.querySelector("#connection-label");
 const modelStatus = document.querySelector("#model-status");
@@ -13,11 +15,16 @@ const loadingDetail = document.querySelector("#loading-detail");
 const setupMessage = document.querySelector("#setup-message");
 const basemapSelect = document.querySelector("#basemap-select");
 const resetButton = document.querySelector("#reset-view");
+const closeUpButton = document.querySelector("#close-up");
 const shareButton = document.querySelector("#share-button");
 const toast = document.querySelector("#toast");
 
 let map;
 let splatModel;
+let loadingFallback;
+let userHasMoved = false;
+let modelIsInteractive = false;
+let modelLoadFailed = false;
 
 function setStatus(label, detail, state = "loading") {
   connectionLabel.textContent = label;
@@ -31,6 +38,14 @@ function showToast(message) {
   toast.textContent = message;
   toast.classList.add("is-visible");
   window.setTimeout(() => toast.classList.remove("is-visible"), 2400);
+}
+
+function dismissLoadingPanel() {
+  window.clearTimeout(loadingFallback);
+  loadingPanel.classList.add("is-complete");
+  window.setTimeout(() => {
+    loadingPanel.hidden = true;
+  }, 500);
 }
 
 async function shareDashboard() {
@@ -94,6 +109,7 @@ async function startDashboard() {
     container: "map",
     center: [0, 20],
     zoom: 1.5,
+    maxZoom: MAX_ZOOM,
     pitch: 45,
     bearing: 0,
     basemap: "hybrid-v4",
@@ -107,16 +123,17 @@ async function startDashboard() {
     splatModel = new SplatModel({ model: MODEL_ID });
 
     splatModel.once("load", () => {
-      splatModel.fit();
+      modelIsInteractive = true;
+      if (!userHasMoved) splatModel.fit();
       setStatus("Live", "Model ready", "ready");
-      loadingPanel.classList.add("is-complete");
-      window.setTimeout(() => {
-        loadingPanel.hidden = true;
-      }, 500);
+      dismissLoadingPanel();
       resetButton.disabled = false;
+      closeUpButton.disabled = false;
     });
 
     splatModel.once("error", () => {
+      modelLoadFailed = true;
+      window.clearTimeout(loadingFallback);
       setStatus(
         "Model unavailable",
         "Check that the model is published and the API key permits this domain.",
@@ -126,9 +143,23 @@ async function startDashboard() {
     });
 
     map.addSplatModel(splatModel);
+
+    // Renderable splats often appear before every detail tile has finished
+    // streaming. Do not keep the viewer covered while that continues.
+    loadingFallback = window.setTimeout(() => {
+      if (modelLoadFailed) return;
+
+      modelIsInteractive = true;
+      setStatus("Live", "High-detail tiles are streaming", "ready");
+      dismissLoadingPanel();
+      resetButton.disabled = false;
+      closeUpButton.disabled = false;
+    }, LOADING_FALLBACK_MS);
   });
 
   map.on("error", () => {
+    if (modelIsInteractive) return;
+
     setStatus(
       "Connection error",
       "Check your API key, allowed origins, and network connection.",
@@ -144,6 +175,32 @@ async function startDashboard() {
   resetButton.addEventListener("click", () => {
     if (splatModel) splatModel.fit();
   });
+
+  closeUpButton.addEventListener("click", () => {
+    const center = splatModel?.getCenter();
+    if (!center) return;
+
+    userHasMoved = true;
+    map.jumpTo({
+      center,
+      zoom: MAX_ZOOM,
+      pitch: 65,
+      bearing: map.getBearing()
+    });
+    showToast(`Maximum zoom: ${MAX_ZOOM}`);
+  });
+
+  document.querySelector("#map").addEventListener("pointerdown", () => {
+    userHasMoved = true;
+  });
+
+  document.querySelector("#map").addEventListener(
+    "wheel",
+    () => {
+      userHasMoved = true;
+    },
+    { passive: true }
+  );
 }
 
 startDashboard();
