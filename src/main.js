@@ -6,6 +6,7 @@ const MODEL_ID = "019f266c-4b5c-7c93-92a6-d59287b2f7cb";
 const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
 const MAX_ZOOM = 22;
 const MAX_MAGNIFICATION = 32;
+const MAGNIFICATION_COMMIT_MS = 180;
 const LOADING_FALLBACK_MS = 4000;
 
 const connectionLabel = document.querySelector("#connection-label");
@@ -27,7 +28,10 @@ let userHasMoved = false;
 let modelIsInteractive = false;
 let modelLoadFailed = false;
 let magnification = 1;
+let appliedMagnification = 1;
+let baseModelScale = null;
 let magnificationFrame;
+let magnificationCommit;
 
 function setStatus(label, detail, state = "loading") {
   connectionLabel.textContent = label;
@@ -36,15 +40,57 @@ function setStatus(label, detail, state = "loading") {
   document.documentElement.dataset.state = state;
 }
 
-function setMagnification(value) {
-  magnification = Math.min(MAX_MAGNIFICATION, Math.max(1, value));
+function captureBaseModelScale() {
+  if (baseModelScale !== null) return true;
+
+  const scale = splatModel?.getScale();
+  if (!Number.isFinite(scale) || scale <= 0) return false;
+  baseModelScale = scale;
+  return true;
+}
+
+function renderMagnificationPreview() {
   window.cancelAnimationFrame(magnificationFrame);
   magnificationFrame = window.requestAnimationFrame(() => {
-    mapElement.style.setProperty("--viewer-magnification", magnification);
+    mapElement.style.setProperty(
+      "--viewer-magnification",
+      magnification / appliedMagnification
+    );
     closeUpButton.textContent = magnification > 1
       ? `Zoom closer · ${magnification.toFixed(magnification < 10 ? 1 : 0)}×`
       : "Zoom closer";
   });
+}
+
+function commitMagnification(delay = MAGNIFICATION_COMMIT_MS) {
+  window.clearTimeout(magnificationCommit);
+  const applyMagnification = () => {
+    if (!captureBaseModelScale()) return;
+
+    mapElement.classList.add("is-committing-zoom");
+    splatModel.setScale(baseModelScale * magnification);
+    appliedMagnification = magnification;
+    mapElement.style.setProperty("--viewer-magnification", 1);
+    if (magnification > 1) map.setModelResolution("QUALITY");
+    window.requestAnimationFrame(() => {
+      mapElement.classList.remove("is-committing-zoom");
+    });
+  };
+
+  if (delay === 0) {
+    applyMagnification();
+    return;
+  }
+
+  magnificationCommit = window.setTimeout(applyMagnification, delay);
+}
+
+function setMagnification(value, immediate = false) {
+  if (!captureBaseModelScale()) return false;
+
+  magnification = Math.min(MAX_MAGNIFICATION, Math.max(1, value));
+  renderMagnificationPreview();
+  commitMagnification(immediate ? 0 : MAGNIFICATION_COMMIT_MS);
   return true;
 }
 
@@ -140,11 +186,12 @@ async function startDashboard() {
 
     splatModel.once("load", () => {
       modelIsInteractive = true;
+      captureBaseModelScale();
       if (!userHasMoved) splatModel.fit();
       setStatus("Live", "Model ready", "ready");
       dismissLoadingPanel();
       resetButton.disabled = false;
-      closeUpButton.disabled = false;
+      closeUpButton.disabled = !captureBaseModelScale();
     });
 
     splatModel.once("error", () => {
@@ -160,6 +207,13 @@ async function startDashboard() {
 
     map.addSplatModel(splatModel);
 
+    const scaleProbe = window.setInterval(() => {
+      if (!captureBaseModelScale()) return;
+      closeUpButton.disabled = false;
+      window.clearInterval(scaleProbe);
+    }, 250);
+    window.setTimeout(() => window.clearInterval(scaleProbe), 30000);
+
     // Renderable splats often appear before every detail tile has finished
     // streaming. Do not keep the viewer covered while that continues.
     loadingFallback = window.setTimeout(() => {
@@ -169,7 +223,7 @@ async function startDashboard() {
       setStatus("Live", "High-detail tiles are streaming", "ready");
       dismissLoadingPanel();
       resetButton.disabled = false;
-      closeUpButton.disabled = false;
+      closeUpButton.disabled = !captureBaseModelScale();
     }, LOADING_FALLBACK_MS);
   });
 
@@ -190,7 +244,7 @@ async function startDashboard() {
 
   resetButton.addEventListener("click", () => {
     if (!splatModel) return;
-    setMagnification(1);
+    setMagnification(1, true);
     splatModel.fit();
   });
 

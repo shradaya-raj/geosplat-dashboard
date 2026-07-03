@@ -209,6 +209,10 @@ h1 {
   will-change: transform;
 }
 
+.map.is-committing-zoom canvas {
+  transition: none;
+}
+
 .setup-message,
 .loading-panel {
   position: absolute;
