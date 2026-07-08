@@ -14,12 +14,14 @@ const loadingPanel = document.querySelector("#loading-panel");
 const loadingTitle = document.querySelector("#loading-title");
 const loadingDetail = document.querySelector("#loading-detail");
 const setupMessage = document.querySelector("#setup-message");
+const compatibilityPanel = document.querySelector("#compatibility-panel");
 const mapElement = document.querySelector("#map");
 const viewerCard = document.querySelector(".viewer-card");
 const basemapSelect = document.querySelector("#basemap-select");
 const resetButton = document.querySelector("#reset-view");
 const closeUpButton = document.querySelector("#close-up");
 const shareButton = document.querySelector("#share-button");
+const copyLinkButton = document.querySelector("#copy-link");
 const toast = document.querySelector("#toast");
 
 let map;
@@ -101,6 +103,15 @@ function showToast(message) {
   window.setTimeout(() => toast.classList.remove("is-visible"), 2400);
 }
 
+async function copyDashboardLink() {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    showToast("Viewer link copied");
+  } catch {
+    showToast("Copy failed. Use the browser address bar.");
+  }
+}
+
 function dismissLoadingPanel() {
   window.clearTimeout(loadingFallback);
   loadingPanel.classList.add("is-complete");
@@ -129,6 +140,7 @@ async function shareDashboard() {
 }
 
 shareButton.addEventListener("click", shareDashboard);
+copyLinkButton.addEventListener("click", copyDashboardLink);
 
 async function startDashboard() {
   if (!API_KEY) {
@@ -154,11 +166,12 @@ async function startDashboard() {
 
   if (!gpuAdapter) {
     setStatus(
-      "WebGPU unavailable",
-      "Use the latest Chrome or Edge with hardware acceleration enabled. Firefox may expose WebGPU without providing a compatible adapter.",
+      "Device not ready for 3D",
+      "The dashboard is accessible, but this device or browser cannot render the WebGPU model.",
       "error"
     );
-    loadingPanel.classList.add("is-error");
+    loadingPanel.hidden = true;
+    compatibilityPanel.hidden = false;
     basemapSelect.disabled = true;
     resetButton.disabled = true;
     closeUpButton.disabled = true;

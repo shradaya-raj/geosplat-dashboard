@@ -53,6 +53,30 @@
             <span id="loading-detail">Connecting to the 3D scene…</span>
           </div>
 
+          <div id="compatibility-panel" class="compatibility-panel" hidden>
+            <span class="compatibility-icon" aria-hidden="true">3D</span>
+            <div class="compatibility-copy">
+              <strong>This device can open the dashboard, but cannot render the model yet.</strong>
+              <p>
+                The Gaussian splat needs WebGPU. Open this same link in the latest Chrome or Edge
+                with hardware acceleration enabled for the full 3D view.
+              </p>
+              <div class="compatibility-actions">
+                <button id="copy-link" class="button button-primary" type="button">
+                  Copy viewer link
+                </button>
+                <a
+                  class="button button-secondary"
+                  href="https://docs.maptiler.com/geosplats-sdk/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Device requirements
+                </a>
+              </div>
+            </div>
+          </div>
+
           <div class="viewer-toolbar">
             <label class="select-control">
               <span class="visually-hidden">Basemap</span>
