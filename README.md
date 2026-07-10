@@ -86,6 +86,16 @@ https://shradaya-raj.github.io/geosplat-dashboard/?model=model-name
 Use the **Share** button after loading a hosted model to copy the direct model
 link.
 
+## Upload from any computer without command prompt
+
+Open the live dashboard and click **Upload model**. It links to:
+
+1. the GitHub Release where model files are attached;
+2. the GitHub Pages deployment workflow that republishes the dashboard.
+
+This keeps uploads secure because GitHub handles authentication. The public
+dashboard never stores a GitHub token.
+
 ## Local testing
 
 ```bash

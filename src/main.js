@@ -24,6 +24,9 @@ const pointModeButton = document.querySelector("#point-mode");
 const localModelButton = document.querySelector("#local-model");
 const fileInput = document.querySelector("#file-input");
 const shareButton = document.querySelector("#share-button");
+const uploadHelpButton = document.querySelector("#upload-help-button");
+const uploadPanel = document.querySelector("#upload-panel");
+const closeUploadPanel = document.querySelector("#close-upload-panel");
 const toast = document.querySelector("#toast");
 const dropZone = document.querySelector("#drop-zone");
 const modelInfo = document.querySelector("#model-info");
@@ -67,6 +70,14 @@ function showToast(message) {
   toast.textContent = message;
   toast.classList.add("is-visible");
   window.setTimeout(() => toast.classList.remove("is-visible"), 2400);
+}
+
+function showUploadPanel() {
+  uploadPanel.hidden = false;
+}
+
+function hideUploadPanel() {
+  uploadPanel.hidden = true;
 }
 
 function showLoading(title, detail) {
@@ -381,6 +392,7 @@ async function shareDashboard() {
   const shareUrl = getShareUrl();
   if (!shareUrl) {
     showToast("Upload this model first, then share the hosted link.");
+    showUploadPanel();
     return;
   }
 
@@ -434,6 +446,11 @@ fileInput.addEventListener("change", () => {
 });
 
 shareButton.addEventListener("click", shareDashboard);
+uploadHelpButton.addEventListener("click", showUploadPanel);
+closeUploadPanel.addEventListener("click", hideUploadPanel);
+uploadPanel.addEventListener("click", (event) => {
+  if (event.target === uploadPanel) hideUploadPanel();
+});
 
 window.addEventListener("dragenter", (event) => {
   event.preventDefault();

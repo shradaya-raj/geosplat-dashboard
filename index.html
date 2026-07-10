@@ -28,6 +28,9 @@
           <button id="share-button" class="button button-primary" type="button">
             Share
           </button>
+          <button id="upload-help-button" class="button button-secondary" type="button">
+            Upload model
+          </button>
         </div>
       </header>
 
@@ -84,6 +87,47 @@
 
           <div id="drop-zone" class="drop-zone" hidden>
             <span>Drop your Gaussian splat file to preview it</span>
+          </div>
+
+          <div id="upload-panel" class="upload-panel" hidden>
+            <button id="close-upload-panel" class="close-button" type="button" aria-label="Close upload guide">
+              ×
+            </button>
+            <span class="empty-icon" aria-hidden="true">UP</span>
+            <div class="empty-copy">
+              <strong>Upload a model so anyone can open it from a link.</strong>
+              <p>
+                Local files are preview-only. To share a model, upload the file
+                to the GitHub Release named <code>models</code>, then run the
+                deployment workflow.
+              </p>
+              <div class="upload-actions">
+                <a
+                  class="button button-primary"
+                  href="https://github.com/shradaya-raj/geosplat-dashboard/releases/tag/models"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open model release
+                </a>
+                <a
+                  class="button button-secondary"
+                  href="https://github.com/shradaya-raj/geosplat-dashboard/actions/workflows/deploy-pages.yml"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Run deployment
+                </a>
+              </div>
+              <ol class="upload-steps">
+                <li>Sign in to GitHub as the repository owner.</li>
+                <li>Open the <code>models</code> release and edit it.</li>
+                <li>Attach your <code>.ply</code>, <code>.splat</code>, <code>.ksplat</code>, or <code>.spz</code> file.</li>
+                <li>Save the release.</li>
+                <li>Open the deployment workflow and click <code>Run workflow</code>.</li>
+                <li>Refresh this dashboard, select the hosted model, then click Share.</li>
+              </ol>
+            </div>
           </div>
         </section>
       </main>
