@@ -258,7 +258,7 @@ function computeModelFrame() {
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return "unknown size";
-  const units = ["B", "MB", "GB"];
+  const units = ["B", "KB", "MB", "GB"];
   let value = bytes;
   let unitIndex = 0;
 
@@ -401,6 +401,7 @@ async function loadManifest() {
 async function loadModel(model, sourceUrl = model.path) {
   activeModel = model;
   const loadToken = ++activeLoadToken;
+  let sceneVisible = false;
   hideEmptyState();
   hideReadyState();
   const sizeHint = model.size ? ` • ${formatBytes(model.size)}` : "";
@@ -443,6 +444,15 @@ async function loadModel(model, sourceUrl = model.path) {
         const stage = statusName[loaderStatus] || "Loading";
         const sizeText = model.size ? ` of ${formatBytes(model.size)}` : "";
         const progressText = `${stage} ${percentCompleteLabel || `${Math.round(percentComplete)}%`}${sizeText}`;
+
+        if (sceneVisible) {
+          connectionLabel.textContent = loaderStatus === 2
+            ? "Live"
+            : `Streaming ${percentCompleteLabel || `${Math.round(percentComplete)}%`}`;
+          updateModelInfo(model);
+          return;
+        }
+
         markProgress(progressText);
         setStatus(stage, `${model.name} • ${progressText}`, "loading");
       }
@@ -451,6 +461,7 @@ async function loadModel(model, sourceUrl = model.path) {
     if (loadToken !== activeLoadToken) return;
 
     viewer.start();
+    sceneVisible = true;
     window.setTimeout(() => {
       if (loadToken !== activeLoadToken) return;
       const splatCount = getLoadedSplatCount();
