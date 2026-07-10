@@ -4,6 +4,8 @@ import "./style.css";
 
 const MANIFEST_URL = `${import.meta.env.BASE_URL}models/manifest.json`;
 const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat", ".spz"];
+const MAX_LOCAL_PREVIEW_BYTES = 350 * 1024 * 1024;
+const MAX_LOCAL_PLY_PREVIEW_BYTES = 150 * 1024 * 1024;
 const SCENE_FORMAT_BY_EXTENSION = {
   ".ply": GaussianSplats3D.SceneFormat.Ply,
   ".splat": GaussianSplats3D.SceneFormat.Splat,
@@ -16,6 +18,7 @@ const loadingPanel = document.querySelector("#loading-panel");
 const loadingTitle = document.querySelector("#loading-title");
 const loadingDetail = document.querySelector("#loading-detail");
 const emptyPanel = document.querySelector("#empty-panel");
+const readyPanel = document.querySelector("#ready-panel");
 const viewerElement = document.querySelector("#viewer");
 const modelSelect = document.querySelector("#model-select");
 const reloadButton = document.querySelector("#reload-model");
@@ -94,6 +97,7 @@ function hideLoading() {
 }
 
 function showEmptyState() {
+  readyPanel.hidden = true;
   emptyPanel.hidden = false;
   hideLoading();
   setStatus("Ready for files", "Add hosted models or open a local splat.", "ready");
@@ -101,6 +105,17 @@ function showEmptyState() {
 
 function hideEmptyState() {
   emptyPanel.hidden = true;
+}
+
+function showReadyState() {
+  emptyPanel.hidden = true;
+  readyPanel.hidden = false;
+  hideLoading();
+  setStatus("Choose model", "Hosted models are available.", "ready");
+}
+
+function hideReadyState() {
+  readyPanel.hidden = true;
 }
 
 function cleanObjectUrl() {
@@ -190,6 +205,20 @@ function computeModelFrame() {
   const radius = Math.max(size.length() * 0.55, 0.5);
 
   return { target, radius, splatCount };
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return "unknown size";
+  const units = ["B", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function frameModel() {
@@ -285,6 +314,11 @@ function fillModelSelect() {
     return;
   }
 
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Choose hosted model";
+  modelSelect.append(placeholder);
+
   for (const [index, model] of models.entries()) {
     const option = document.createElement("option");
     option.value = String(index);
@@ -311,6 +345,7 @@ async function loadManifest() {
 async function loadModel(model, sourceUrl = model.path) {
   activeModel = model;
   hideEmptyState();
+  hideReadyState();
   showLoading("Loading model", model.name);
 
   try {
@@ -369,8 +404,19 @@ async function loadHostedModel(index) {
 
 async function loadLocalFile(file) {
   const lowerName = file.name.toLowerCase();
-  if (!SUPPORTED_EXTENSIONS.some((extension) => lowerName.endsWith(extension))) {
-    showToast("Use .ply, .splat, or .ksplat");
+  const extension = SUPPORTED_EXTENSIONS.find((item) => lowerName.endsWith(item));
+  if (!extension) {
+    showToast("Use .ply, .splat, .ksplat, or .spz");
+    return;
+  }
+
+  const previewLimit = extension === ".ply"
+    ? MAX_LOCAL_PLY_PREVIEW_BYTES
+    : MAX_LOCAL_PREVIEW_BYTES;
+
+  if (file.size > previewLimit) {
+    showToast(`This ${formatBytes(file.size)} file is too large for local preview.`);
+    showUploadPanel();
     return;
   }
 
@@ -418,6 +464,11 @@ async function shareDashboard() {
 }
 
 modelSelect.addEventListener("change", () => {
+  if (modelSelect.value === "") {
+    showReadyState();
+    return;
+  }
+
   loadHostedModel(Number(modelSelect.value));
 });
 
@@ -484,14 +535,26 @@ async function startDashboard() {
   }
 
   const requestedModel = new URLSearchParams(window.location.search).get("model");
+  if (!requestedModel) {
+    modelSelect.value = "";
+    showReadyState();
+    return;
+  }
+
   const requestedIndex = models.findIndex((model) => {
     const slug = model.slug || slugify(model.name);
     return slug === requestedModel || model.name === requestedModel;
   });
 
-  const modelIndex = requestedIndex >= 0 ? requestedIndex : 0;
-  modelSelect.value = String(modelIndex);
-  await loadHostedModel(modelIndex);
+  if (requestedIndex < 0) {
+    modelSelect.value = "";
+    showReadyState();
+    showToast("Shared model was not found.");
+    return;
+  }
+
+  modelSelect.value = String(requestedIndex);
+  await loadHostedModel(requestedIndex);
 }
 
 startDashboard();
