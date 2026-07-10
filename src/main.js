@@ -6,6 +6,8 @@ const MANIFEST_URL = `${import.meta.env.BASE_URL}models/manifest.json`;
 const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat", ".spz"];
 const MAX_LOCAL_PREVIEW_BYTES = 350 * 1024 * 1024;
 const MAX_LOCAL_PLY_PREVIEW_BYTES = 150 * 1024 * 1024;
+const LARGE_HOSTED_MODEL_BYTES = 125 * 1024 * 1024;
+const STALLED_LOAD_WARNING_MS = 45000;
 const SCENE_FORMAT_BY_EXTENSION = {
   ".ply": GaussianSplats3D.SceneFormat.Ply,
   ".splat": GaussianSplats3D.SceneFormat.Splat,
@@ -40,6 +42,8 @@ let activeModel = null;
 let activeObjectUrl = null;
 let lastFrame = null;
 let pointModeEnabled = false;
+let activeLoadToken = 0;
+let loadingWatchdog = null;
 
 function slugify(value) {
   return String(value || "")
@@ -69,6 +73,48 @@ function setStatus(label, detail, state = "loading") {
   document.documentElement.dataset.state = state;
 }
 
+function clearLoadingWatchdog() {
+  if (!loadingWatchdog) return;
+  window.clearInterval(loadingWatchdog);
+  loadingWatchdog = null;
+}
+
+function startLoadingWatchdog(model, token) {
+  clearLoadingWatchdog();
+  const startedAt = Date.now();
+  let lastProgressAt = startedAt;
+  let lastProgressText = "";
+
+  loadingWatchdog = window.setInterval(() => {
+    if (token !== activeLoadToken) {
+      clearLoadingWatchdog();
+      return;
+    }
+
+    const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
+    const stalledSeconds = Math.round((Date.now() - lastProgressAt) / 1000);
+
+    if (Date.now() - lastProgressAt > STALLED_LOAD_WARNING_MS) {
+      const sizeHint = model.size ? ` (${formatBytes(model.size)})` : "";
+      setStatus(
+        "Still loading",
+        `${model.name}${sizeHint} • ${elapsedSeconds}s elapsed. If this stays here, use a smaller sampled or tiled model.`,
+        "loading"
+      );
+      return;
+    }
+
+    if (lastProgressText) {
+      setStatus("Loading model", `${lastProgressText} • ${stalledSeconds}s since update`, "loading");
+    }
+  }, 5000);
+
+  return (progressText) => {
+    lastProgressAt = Date.now();
+    lastProgressText = progressText;
+  };
+}
+
 function showToast(message) {
   toast.textContent = message;
   toast.classList.add("is-visible");
@@ -90,6 +136,7 @@ function showLoading(title, detail) {
 }
 
 function hideLoading() {
+  clearLoadingWatchdog();
   loadingPanel.classList.add("is-complete");
   window.setTimeout(() => {
     loadingPanel.hidden = true;
@@ -140,6 +187,8 @@ function resetViewer() {
     sharedMemoryForWorkers: false,
     gpuAcceleratedSort: false,
     integerBasedSort: false,
+    optimizeSplatData: false,
+    inMemoryCompressionLevel: 0,
     halfPrecisionCovariancesOnGPU: true,
     ignoreDevicePixelRatio: true,
     sphericalHarmonicsDegree: 0,
@@ -263,16 +312,23 @@ function normalizeManifest(rawManifest) {
       }
 
       const name = model.name || model.title || `Model ${index + 1}`;
+      const path = model.path || model.url;
+      const filename = model.filename || path?.split("/").pop() || name;
+      const extension = getExtensionFromPath(filename || path || "");
+      const progressiveDefault = extension === ".splat" || extension === ".ksplat";
+
       return {
         name,
-        slug: model.slug || slugify(name || model.path || model.url),
-        path: model.path || model.url,
+        slug: model.slug || slugify(name || path),
+        path,
+        filename,
+        size: model.size,
         format: model.format,
         position: model.position,
         rotation: model.rotation,
         scale: model.scale,
         alphaThreshold: model.alphaThreshold ?? model.splatAlphaRemovalThreshold ?? 0,
-        progressiveLoad: model.progressiveLoad ?? false
+        progressiveLoad: model.progressiveLoad ?? progressiveDefault
       };
     })
     .filter((model) => model.path);
@@ -344,9 +400,12 @@ async function loadManifest() {
 
 async function loadModel(model, sourceUrl = model.path) {
   activeModel = model;
+  const loadToken = ++activeLoadToken;
   hideEmptyState();
   hideReadyState();
-  showLoading("Loading model", model.name);
+  const sizeHint = model.size ? ` • ${formatBytes(model.size)}` : "";
+  showLoading("Loading model", `${model.name}${sizeHint}`);
+  const markProgress = startLoadingWatchdog(model, loadToken);
 
   try {
     resetViewer();
@@ -361,18 +420,39 @@ async function loadModel(model, sourceUrl = model.path) {
       throw new Error("Unsupported or unknown Gaussian splat file format.");
     }
 
+    if (model.size > LARGE_HOSTED_MODEL_BYTES && !model.progressiveLoad) {
+      showToast("Large hosted model: progressive or tiled publishing is recommended.");
+    }
+
+    const statusName = {
+      0: "Downloading",
+      1: "Preparing",
+      2: "Ready"
+    };
+
     await viewer.addSplatScene(sourceUrl, {
       format,
       splatAlphaRemovalThreshold: model.alphaThreshold ?? 0,
-      showLoadingUI: true,
+      showLoadingUI: false,
       progressiveLoad: model.progressiveLoad ?? false,
       position: model.position ?? [0, 0, 0],
       rotation: model.rotation ?? [0, 0, 0, 1],
-      scale: model.scale ?? [1, 1, 1]
+      scale: model.scale ?? [1, 1, 1],
+      onProgress: (percentComplete, percentCompleteLabel, loaderStatus) => {
+        if (loadToken !== activeLoadToken) return;
+        const stage = statusName[loaderStatus] || "Loading";
+        const sizeText = model.size ? ` of ${formatBytes(model.size)}` : "";
+        const progressText = `${stage} ${percentCompleteLabel || `${Math.round(percentComplete)}%`}${sizeText}`;
+        markProgress(progressText);
+        setStatus(stage, `${model.name} • ${progressText}`, "loading");
+      }
     });
+
+    if (loadToken !== activeLoadToken) return;
 
     viewer.start();
     window.setTimeout(() => {
+      if (loadToken !== activeLoadToken) return;
       const splatCount = getLoadedSplatCount();
       updateModelInfo(model);
       pointModeButton.disabled = splatCount <= 0;
@@ -383,6 +463,8 @@ async function loadModel(model, sourceUrl = model.path) {
     setStatus("Live", model.name, "ready");
     hideLoading();
   } catch (error) {
+    if (loadToken !== activeLoadToken) return;
+    clearLoadingWatchdog();
     console.error(error);
     loadingPanel.classList.add("is-error");
     setStatus(

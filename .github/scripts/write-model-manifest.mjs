@@ -1,4 +1,4 @@
-import { readdir, writeFile } from "node:fs/promises";
+import { readdir, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 
 const modelsDir = process.argv[2] || "dist/models";
@@ -25,14 +25,28 @@ const models = entries
   .map((entry) => entry.name)
   .filter((filename) => supportedExtensions.has(extname(filename).toLowerCase()))
   .sort((a, b) => a.localeCompare(b))
-  .map((filename) => {
+  .map(async (filename) => {
     const name = titleFromFilename(filename);
+    const extension = extname(filename).toLowerCase();
+    const modelPath = join(modelsDir, filename);
+    const fileStats = await stat(modelPath);
 
     return {
       name,
       slug: slugify(filename),
       path: `./models/${filename}`,
-      progressiveLoad: false,
+      filename,
+      size: fileStats.size,
+      format: extension === ".splat"
+        ? "Splat"
+        : extension === ".ksplat"
+          ? "KSplat"
+          : extension === ".spz"
+            ? "Spz"
+            : extension === ".ply"
+              ? "Ply"
+              : undefined,
+      progressiveLoad: extension === ".splat" || extension === ".ksplat",
       alphaThreshold: 0,
       position: [0, 0, 0],
       rotation: [0, 0, 0, 1],
@@ -40,9 +54,11 @@ const models = entries
     };
   });
 
+const resolvedModels = await Promise.all(models);
+
 await writeFile(
   join(modelsDir, "manifest.json"),
-  `${JSON.stringify({ models }, null, 2)}\n`
+  `${JSON.stringify({ models: resolvedModels }, null, 2)}\n`
 );
 
-console.log(`Wrote ${models.length} model(s) to ${join(modelsDir, "manifest.json")}`);
+console.log(`Wrote ${resolvedModels.length} model(s) to ${join(modelsDir, "manifest.json")}`);
