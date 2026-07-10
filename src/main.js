@@ -23,6 +23,7 @@ const emptyPanel = document.querySelector("#empty-panel");
 const readyPanel = document.querySelector("#ready-panel");
 const viewerElement = document.querySelector("#viewer");
 const modelSelect = document.querySelector("#model-select");
+const loadSelectedButton = document.querySelector("#load-selected");
 const reloadButton = document.querySelector("#reload-model");
 const frameButton = document.querySelector("#frame-model");
 const pointModeButton = document.querySelector("#point-mode");
@@ -39,6 +40,7 @@ const modelInfo = document.querySelector("#model-info");
 let viewer;
 let models = [];
 let activeModel = null;
+let activeModels = [];
 let activeObjectUrl = null;
 let lastFrame = null;
 let pointModeEnabled = false;
@@ -53,11 +55,23 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-function updateShareUrl(model) {
-  if (!model || activeObjectUrl) return;
+function updateShareUrl(selectedModels) {
+  if (selectedModels && !Array.isArray(selectedModels)) selectedModels = [selectedModels];
+  if (!selectedModels?.length || activeObjectUrl) return;
 
   const url = new URL(window.location.href);
-  url.searchParams.set("model", model.slug || slugify(model.name));
+  url.searchParams.delete("model");
+  url.searchParams.delete("models");
+
+  if (selectedModels.length === 1) {
+    url.searchParams.set("model", selectedModels[0].slug || slugify(selectedModels[0].name));
+  } else {
+    url.searchParams.set(
+      "models",
+      selectedModels.map((model) => model.slug || slugify(model.name)).join(",")
+    );
+  }
+
   window.history.replaceState({}, "", url);
 }
 
@@ -113,6 +127,21 @@ function startLoadingWatchdog(model, token) {
     lastProgressAt = Date.now();
     lastProgressText = progressText;
   };
+}
+
+function getModelDisplayName(selectedModels) {
+  if (!selectedModels?.length) return "No model";
+  if (selectedModels.length === 1) return selectedModels[0].name;
+  return `${selectedModels.length} blocks`;
+}
+
+function getTotalModelSize(selectedModels) {
+  const total = selectedModels
+    .map((model) => model.size)
+    .filter(Number.isFinite)
+    .reduce((sum, size) => sum + size, 0);
+
+  return total || undefined;
 }
 
 function showToast(message) {
@@ -201,14 +230,15 @@ function getLoadedSplatCount() {
   return viewer?.getSplatMesh?.()?.getSplatCount?.() ?? 0;
 }
 
-function updateModelInfo(model, frame = lastFrame) {
+function updateModelInfo(model = activeModel, frame = lastFrame) {
   const splatCount = frame?.splatCount ?? getLoadedSplatCount();
   const radius = frame?.radius;
   const infoParts = [
-    model?.name || "Loaded model",
+    model?.name || getModelDisplayName(activeModels) || "Loaded model",
     `${splatCount.toLocaleString()} splats`
   ];
 
+  if (activeModels.length > 1) infoParts.push(`${activeModels.length} blocks`);
   if (Number.isFinite(radius)) infoParts.push(`radius ${radius.toFixed(2)}`);
   if (pointModeEnabled) infoParts.push("point mode");
 
@@ -364,16 +394,12 @@ function fillModelSelect() {
     option.textContent = "No hosted models";
     modelSelect.append(option);
     modelSelect.disabled = true;
+    loadSelectedButton.disabled = true;
     reloadButton.disabled = true;
     frameButton.disabled = false;
     pointModeButton.disabled = true;
     return;
   }
-
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = "Choose hosted model";
-  modelSelect.append(placeholder);
 
   for (const [index, model] of models.entries()) {
     const option = document.createElement("option");
@@ -383,9 +409,23 @@ function fillModelSelect() {
   }
 
   modelSelect.disabled = false;
+  loadSelectedButton.disabled = false;
   reloadButton.disabled = false;
   frameButton.disabled = false;
   pointModeButton.disabled = true;
+}
+
+function getSelectedModelIndexes() {
+  return [...modelSelect.selectedOptions]
+    .map((option) => Number(option.value))
+    .filter((index) => Number.isInteger(index) && models[index]);
+}
+
+function selectModelIndexes(indexes) {
+  const selected = new Set(indexes.map(String));
+  for (const option of modelSelect.options) {
+    option.selected = selected.has(option.value);
+  }
 }
 
 async function loadManifest() {
@@ -400,6 +440,7 @@ async function loadManifest() {
 
 async function loadModel(model, sourceUrl = model.path) {
   activeModel = model;
+  activeModels = [model];
   const loadToken = ++activeLoadToken;
   let sceneVisible = false;
   hideEmptyState();
@@ -491,8 +532,117 @@ async function loadHostedModel(index) {
   cleanObjectUrl();
   const model = models[index];
   if (!model) return;
+  selectModelIndexes([index]);
   await loadModel(model, modelPathToUrl(model.path));
   updateShareUrl(model);
+}
+
+async function loadSelectedHostedModels() {
+  cleanObjectUrl();
+  const indexes = getSelectedModelIndexes();
+  const selectedModels = indexes.map((index) => models[index]).filter(Boolean);
+
+  if (!selectedModels.length) {
+    showReadyState();
+    showToast("Select one or more hosted blocks first.");
+    return;
+  }
+
+  if (selectedModels.length === 1) {
+    await loadHostedModel(indexes[0]);
+    return;
+  }
+
+  activeModels = selectedModels;
+  activeModel = {
+    name: getModelDisplayName(selectedModels),
+    size: getTotalModelSize(selectedModels)
+  };
+
+  const loadToken = ++activeLoadToken;
+  let sceneVisible = false;
+  const sizeHint = activeModel.size ? ` • ${formatBytes(activeModel.size)}` : "";
+  hideEmptyState();
+  hideReadyState();
+  showLoading("Loading blocks", `${activeModel.name}${sizeHint}`);
+  const markProgress = startLoadingWatchdog(activeModel, loadToken);
+
+  try {
+    resetViewer();
+    frameButton.disabled = false;
+    pointModeButton.disabled = true;
+    modelInfo.hidden = true;
+    lastFrame = null;
+    pointModeEnabled = false;
+
+    const sceneOptions = selectedModels.map((model) => {
+      const format = getSceneFormat(model);
+      if (format === undefined || format === null) {
+        throw new Error(`Unsupported format for ${model.name}.`);
+      }
+
+      return {
+        path: modelPathToUrl(model.path),
+        format,
+        splatAlphaRemovalThreshold: model.alphaThreshold ?? 0,
+        position: model.position ?? [0, 0, 0],
+        rotation: model.rotation ?? [0, 0, 0, 1],
+        scale: model.scale ?? [1, 1, 1]
+      };
+    });
+
+    const statusName = {
+      0: "Downloading",
+      1: "Preparing",
+      2: "Ready"
+    };
+
+    await viewer.addSplatScenes(sceneOptions, false, (percentComplete, percentCompleteLabel, loaderStatus) => {
+      if (loadToken !== activeLoadToken) return;
+      const stage = statusName[loaderStatus] || "Loading";
+      const sizeText = activeModel.size ? ` of ${formatBytes(activeModel.size)}` : "";
+      const progressText = `${stage} ${percentCompleteLabel || `${Math.round(percentComplete)}%`}${sizeText}`;
+
+      if (sceneVisible) {
+        connectionLabel.textContent = loaderStatus === 2
+          ? "Live"
+          : `Streaming ${percentCompleteLabel || `${Math.round(percentComplete)}%`}`;
+        updateModelInfo(activeModel);
+        return;
+      }
+
+      markProgress(progressText);
+      setStatus(stage, `${activeModel.name} • ${progressText}`, "loading");
+    });
+
+    if (loadToken !== activeLoadToken) return;
+
+    viewer.start();
+    sceneVisible = true;
+    window.setTimeout(() => {
+      if (loadToken !== activeLoadToken) return;
+      const splatCount = getLoadedSplatCount();
+      updateModelInfo(activeModel);
+      pointModeButton.disabled = splatCount <= 0;
+      frameButton.disabled = false;
+      pointModeButton.textContent = "Points";
+      if (!frameModel()) showToast("Blocks loaded, but no frameable splats were found.");
+    }, 100);
+    setStatus("Live", activeModel.name, "ready");
+    updateShareUrl(selectedModels);
+    hideLoading();
+  } catch (error) {
+    if (loadToken !== activeLoadToken) return;
+    clearLoadingWatchdog();
+    console.error(error);
+    loadingPanel.classList.add("is-error");
+    setStatus(
+      "Blocks failed",
+      error?.message || "Check the file paths, formats, sizes, and browser console.",
+      "error"
+    );
+    showToast(error?.message || "Could not load selected blocks");
+  }
 }
 
 async function loadLocalFile(file) {
@@ -557,13 +707,12 @@ async function shareDashboard() {
 }
 
 modelSelect.addEventListener("change", () => {
-  if (modelSelect.value === "") {
+  if (!getSelectedModelIndexes().length) {
     showReadyState();
-    return;
   }
-
-  loadHostedModel(Number(modelSelect.value));
 });
+
+loadSelectedButton.addEventListener("click", loadSelectedHostedModels);
 
 reloadButton.addEventListener("click", () => {
   if (activeObjectUrl && activeModel) {
@@ -571,7 +720,13 @@ reloadButton.addEventListener("click", () => {
     return;
   }
 
-  loadHostedModel(Number(modelSelect.value));
+  if (activeModels.length > 1) {
+    loadSelectedHostedModels();
+    return;
+  }
+
+  const [selectedIndex] = getSelectedModelIndexes();
+  if (selectedIndex !== undefined) loadHostedModel(selectedIndex);
 });
 
 frameButton.addEventListener("click", () => {
@@ -627,27 +782,40 @@ async function startDashboard() {
     return;
   }
 
-  const requestedModel = new URLSearchParams(window.location.search).get("model");
-  if (!requestedModel) {
-    modelSelect.value = "";
+  const searchParams = new URLSearchParams(window.location.search);
+  const requestedModel = searchParams.get("model");
+  const requestedModels = searchParams.get("models");
+
+  if (!requestedModel && !requestedModels) {
+    selectModelIndexes([]);
     showReadyState();
     return;
   }
 
-  const requestedIndex = models.findIndex((model) => {
-    const slug = model.slug || slugify(model.name);
-    return slug === requestedModel || model.name === requestedModel;
-  });
+  const requestedSlugs = requestedModels
+    ? requestedModels.split(",").map((value) => value.trim()).filter(Boolean)
+    : [requestedModel];
 
-  if (requestedIndex < 0) {
-    modelSelect.value = "";
+  const requestedIndexes = requestedSlugs
+    .map((requestedSlug) => models.findIndex((model) => {
+      const slug = model.slug || slugify(model.name);
+      return slug === requestedSlug || model.name === requestedSlug;
+    }))
+    .filter((index) => index >= 0);
+
+  if (!requestedIndexes.length) {
+    selectModelIndexes([]);
     showReadyState();
     showToast("Shared model was not found.");
     return;
   }
 
-  modelSelect.value = String(requestedIndex);
-  await loadHostedModel(requestedIndex);
+  selectModelIndexes(requestedIndexes);
+  if (requestedIndexes.length === 1) {
+    await loadHostedModel(requestedIndexes[0]);
+  } else {
+    await loadSelectedHostedModels();
+  }
 }
 
 startDashboard();

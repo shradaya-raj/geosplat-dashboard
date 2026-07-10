@@ -366,14 +366,20 @@ html[data-state="error"] .live-dot {
 }
 
 .select-control select {
-  min-width: 160px;
+  min-width: 210px;
   max-width: min(52vw, 360px);
   border: 0;
   outline: 0;
   color: var(--ink);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.03);
   font-size: 12px;
   font-weight: 650;
+}
+
+.select-control select[multiple] {
+  min-height: 42px;
+  padding: 4px;
+  border-radius: 8px;
 }
 
 .select-control option {

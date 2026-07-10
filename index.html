@@ -66,9 +66,8 @@
             <div class="empty-copy">
               <strong>Hosted models are ready.</strong>
               <p>
-                Choose a model from the dropdown to load it. Large Gaussian
-                splats can take time and memory, so the dashboard no longer
-                auto-loads them when the page opens.
+                Choose one or more hosted blocks, then click Load selected.
+                Hold Ctrl or Shift to select multiple blocks from the same area.
               </p>
             </div>
           </div>
@@ -76,11 +75,14 @@
           <div class="viewer-toolbar">
             <label class="select-control">
               <span class="visually-hidden">Model</span>
-              <select id="model-select" aria-label="Model" disabled>
+              <select id="model-select" aria-label="Models" multiple size="2" disabled>
                 <option>No hosted models</option>
               </select>
             </label>
 
+            <button id="load-selected" class="icon-button" type="button" disabled>
+              Load selected
+            </button>
             <button id="reload-model" class="icon-button" type="button" disabled>
               Reload
             </button>
