@@ -20,17 +20,20 @@ const viewerElement = document.querySelector("#viewer");
 const modelSelect = document.querySelector("#model-select");
 const reloadButton = document.querySelector("#reload-model");
 const frameButton = document.querySelector("#frame-model");
+const pointModeButton = document.querySelector("#point-mode");
 const localModelButton = document.querySelector("#local-model");
 const fileInput = document.querySelector("#file-input");
 const shareButton = document.querySelector("#share-button");
 const toast = document.querySelector("#toast");
 const dropZone = document.querySelector("#drop-zone");
+const modelInfo = document.querySelector("#model-info");
 
 let viewer;
 let models = [];
 let activeModel = null;
 let activeObjectUrl = null;
 let lastFrame = null;
+let pointModeEnabled = false;
 
 function setStatus(label, detail, state = "loading") {
   connectionLabel.textContent = label;
@@ -98,6 +101,39 @@ function resetViewer() {
   });
 }
 
+function getLoadedSplatCount() {
+  return viewer?.getSplatMesh?.()?.getSplatCount?.() ?? 0;
+}
+
+function updateModelInfo(model, frame = lastFrame) {
+  const splatCount = frame?.splatCount ?? getLoadedSplatCount();
+  const radius = frame?.radius;
+  const infoParts = [
+    model?.name || "Loaded model",
+    `${splatCount.toLocaleString()} splats`
+  ];
+
+  if (Number.isFinite(radius)) infoParts.push(`radius ${radius.toFixed(2)}`);
+  if (pointModeEnabled) infoParts.push("point mode");
+
+  modelInfo.textContent = infoParts.join(" · ");
+  modelInfo.hidden = false;
+}
+
+function setPointMode(enabled) {
+  const splatMesh = viewer?.getSplatMesh?.();
+  if (!splatMesh) return false;
+
+  pointModeEnabled = enabled;
+  splatMesh.setPointCloudModeEnabled(enabled);
+  splatMesh.setSplatScale(enabled ? 1.35 : 1);
+  pointModeButton.textContent = enabled ? "Splats" : "Points";
+  pointModeButton.disabled = false;
+  updateModelInfo(activeModel);
+  viewer?.forceRenderNextFrame?.();
+  return true;
+}
+
 function computeModelFrame() {
   const splatMesh = viewer?.getSplatMesh?.();
   const splatCount = splatMesh?.getSplatCount?.() ?? 0;
@@ -143,6 +179,7 @@ function frameModel() {
   viewer.controls.update();
   viewer.forceRenderNextFrame?.();
   frameButton.disabled = false;
+  updateModelInfo(activeModel, frame);
   return true;
 }
 
@@ -169,7 +206,7 @@ function normalizeManifest(rawManifest) {
         position: model.position,
         rotation: model.rotation,
         scale: model.scale,
-        alphaThreshold: model.alphaThreshold ?? model.splatAlphaRemovalThreshold ?? 1,
+        alphaThreshold: model.alphaThreshold ?? model.splatAlphaRemovalThreshold ?? 0,
         progressiveLoad: model.progressiveLoad ?? false
       };
     })
@@ -207,6 +244,8 @@ function fillModelSelect() {
     modelSelect.append(option);
     modelSelect.disabled = true;
     reloadButton.disabled = true;
+    frameButton.disabled = false;
+    pointModeButton.disabled = true;
     return;
   }
 
@@ -219,7 +258,8 @@ function fillModelSelect() {
 
   modelSelect.disabled = false;
   reloadButton.disabled = false;
-  frameButton.disabled = true;
+  frameButton.disabled = false;
+  pointModeButton.disabled = true;
 }
 
 async function loadManifest() {
@@ -239,8 +279,11 @@ async function loadModel(model, sourceUrl = model.path) {
 
   try {
     resetViewer();
-    frameButton.disabled = true;
+    frameButton.disabled = false;
+    pointModeButton.disabled = true;
+    modelInfo.hidden = true;
     lastFrame = null;
+    pointModeEnabled = false;
 
     const format = getSceneFormat(model);
     if (!format) {
@@ -249,7 +292,7 @@ async function loadModel(model, sourceUrl = model.path) {
 
     await viewer.addSplatScene(sourceUrl, {
       format,
-      splatAlphaRemovalThreshold: model.alphaThreshold ?? 1,
+      splatAlphaRemovalThreshold: model.alphaThreshold ?? 0,
       showLoadingUI: true,
       progressiveLoad: model.progressiveLoad ?? false,
       position: model.position ?? [0, 0, 0],
@@ -259,7 +302,12 @@ async function loadModel(model, sourceUrl = model.path) {
 
     viewer.start();
     window.setTimeout(() => {
-      if (!frameModel()) showToast("Model loaded. Try dragging or scrolling to find it.");
+      const splatCount = getLoadedSplatCount();
+      updateModelInfo(model);
+      pointModeButton.disabled = splatCount <= 0;
+      frameButton.disabled = false;
+      setPointMode(true);
+      if (!frameModel()) showToast("Model loaded, but no frameable splats were found.");
     }, 100);
     setStatus("Live", model.name, "ready");
     hideLoading();
@@ -297,7 +345,7 @@ async function loadLocalFile(file) {
       path: activeObjectUrl,
       filename: file.name,
       progressiveLoad: false,
-      alphaThreshold: 1
+      alphaThreshold: 0
     },
     activeObjectUrl
   );
@@ -338,6 +386,10 @@ reloadButton.addEventListener("click", () => {
 
 frameButton.addEventListener("click", () => {
   if (!frameModel()) showToast("Could not frame this model");
+});
+
+pointModeButton.addEventListener("click", () => {
+  if (!setPointMode(!pointModeEnabled)) showToast("Point mode is not available yet");
 });
 
 localModelButton.addEventListener("click", () => fileInput.click());

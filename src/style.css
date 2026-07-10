@@ -350,6 +350,28 @@ html[data-state="error"] .live-dot {
   font-weight: 800;
 }
 
+.model-info {
+  position: absolute;
+  z-index: 3;
+  left: 16px;
+  bottom: 16px;
+  max-width: min(680px, calc(100% - 32px));
+  padding: 10px 13px;
+  border: 1px solid rgba(230, 246, 237, 0.14);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(7, 18, 17, 0.88);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-info[hidden] {
+  display: none;
+}
+
 .toast {
   position: fixed;
   z-index: 20;
