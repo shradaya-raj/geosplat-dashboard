@@ -468,7 +468,7 @@ async function loadModel(model, sourceUrl = model.path) {
       updateModelInfo(model);
       pointModeButton.disabled = splatCount <= 0;
       frameButton.disabled = false;
-      setPointMode(true);
+      pointModeButton.textContent = "Points";
       if (!frameModel()) showToast("Model loaded, but no frameable splats were found.");
     }, 100);
     setStatus("Live", model.name, "ready");

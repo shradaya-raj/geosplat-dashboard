@@ -5,9 +5,15 @@ const modelsDir = process.argv[2] || "dist/models";
 const supportedExtensions = new Set([".ply", ".splat", ".ksplat", ".spz"]);
 
 function titleFromFilename(filename) {
-  return basename(filename, extname(filename))
+  const baseName = basename(filename, extname(filename));
+  const qualitySuffix = baseName.toLowerCase().endsWith(".full")
+    ? " Full Quality"
+    : "";
+
+  return baseName
+    .replace(/\.full$/i, "")
     .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .replace(/\b\w/g, (letter) => letter.toUpperCase()) + qualitySuffix;
 }
 
 function slugify(value) {
