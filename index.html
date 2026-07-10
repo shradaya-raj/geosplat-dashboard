@@ -5,11 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#071211" />
     <meta name="color-scheme" content="dark" />
-    <link rel="preconnect" href="https://api.maptiler.com" crossorigin />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta
       name="description"
-      content="Interactive georeferenced Gaussian splat viewer"
+      content="Self-hosted Gaussian splat viewer for PLY, SPLAT, and KSPLAT models"
     />
     <title>Gaussian Viewer</title>
   </head>
@@ -33,69 +32,51 @@
       </header>
 
       <main class="dashboard">
-        <section class="viewer-card" aria-label="Interactive 3D model viewer">
-          <div id="map" class="map"></div>
-
-          <div id="setup-message" class="setup-message" hidden>
-            <span class="setup-icon">!</span>
-            <div>
-              <strong>MapTiler key required</strong>
-              <p>
-                Add <code>VITE_MAPTILER_API_KEY</code> to your local environment
-                or GitHub Actions secret, then rebuild the dashboard.
-              </p>
-            </div>
-          </div>
+        <section class="viewer-card" aria-label="Interactive Gaussian splat viewer">
+          <div id="viewer" class="viewer"></div>
 
           <div id="loading-panel" class="loading-panel">
             <span class="loader"></span>
-            <strong id="loading-title">Preparing terrain</strong>
-            <span id="loading-detail">Connecting to the 3D scene…</span>
+            <strong id="loading-title">Preparing viewer</strong>
+            <span id="loading-detail">Looking for self-hosted models...</span>
           </div>
 
-          <div id="compatibility-panel" class="compatibility-panel" hidden>
-            <span class="compatibility-icon" aria-hidden="true">3D</span>
-            <div class="compatibility-copy">
-              <strong>This device can open the dashboard, but cannot render the model yet.</strong>
+          <div id="empty-panel" class="empty-panel" hidden>
+            <span class="empty-icon" aria-hidden="true">GS</span>
+            <div class="empty-copy">
+              <strong>Add your Gaussian splat files to this dashboard.</strong>
               <p>
-                The Gaussian splat needs WebGPU. Open this same link in the latest Chrome or Edge
-                with hardware acceleration enabled for the full 3D view.
+                Put <code>.ply</code>, <code>.splat</code>, or <code>.ksplat</code>
+                files in <code>public/models</code>, then list them in
+                <code>public/models/manifest.json</code>. You can also drag a file
+                here for local testing.
               </p>
-              <div class="compatibility-actions">
-                <button id="copy-link" class="button button-primary" type="button">
-                  Copy viewer link
-                </button>
-                <a
-                  class="button button-secondary"
-                  href="https://docs.maptiler.com/geosplats-sdk/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Device requirements
-                </a>
-              </div>
+              <label class="button button-primary file-button">
+                Load local file
+                <input id="file-input" type="file" accept=".ply,.splat,.ksplat" />
+              </label>
             </div>
           </div>
 
           <div class="viewer-toolbar">
             <label class="select-control">
-              <span class="visually-hidden">Basemap</span>
-              <select id="basemap-select" aria-label="Basemap">
-                <option value="hybrid-v4">Hybrid</option>
-                <option value="satellite-v4">Satellite</option>
-                <option value="streets-v4">Streets</option>
-                <option value="dataviz-v4">Data</option>
+              <span class="visually-hidden">Model</span>
+              <select id="model-select" aria-label="Model" disabled>
+                <option>No hosted models</option>
               </select>
             </label>
 
-            <button id="reset-view" class="icon-button" type="button" title="Frame model" disabled>
-              Frame model
+            <button id="reload-model" class="icon-button" type="button" disabled>
+              Reload
             </button>
-            <button id="close-up" class="icon-button" type="button" title="Zoom closer than the map limit" disabled>
-              Zoom closer
+            <button id="local-model" class="icon-button" type="button">
+              Open file
             </button>
           </div>
 
+          <div id="drop-zone" class="drop-zone" hidden>
+            <span>Drop your Gaussian splat file to preview it</span>
+          </div>
         </section>
       </main>
 

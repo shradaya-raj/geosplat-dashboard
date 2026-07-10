@@ -1,42 +1,71 @@
 # Gaussian Viewer
 
-A private-brand, GitHub Pages-ready dashboard for an interactive Gaussian model.
+A self-hosted Gaussian splat dashboard for `.ply`, `.splat`, and `.ksplat`
+models. It does not use MapTiler or a MapTiler API key.
 
-## Run locally
+## Add hosted models
 
-1. Copy `.env.example` to `.env.local`.
-2. Add a MapTiler browser API key to `.env.local`:
+1. Put model files in:
 
-   ```env
-   VITE_MAPTILER_API_KEY=your_key_here
+   ```text
+   public/models/
    ```
 
-3. Allow `localhost:5173` in the key's HTTP-origin restrictions.
-4. Install and run:
+2. Add each file to:
 
-   ```bash
-   npm install
-   npm run dev
+   ```text
+   public/models/manifest.json
    ```
+
+Example:
+
+```json
+{
+  "models": [
+    {
+      "name": "Main capture",
+      "path": "./models/main-capture.ksplat",
+      "progressiveLoad": true,
+      "alphaThreshold": 1,
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [1, 1, 1]
+    }
+  ]
+}
+```
+
+For best loading performance, use `.ksplat` when possible. Raw `.ply` files can
+be much larger and slower to load.
+
+## Local testing
+
+```bash
+npm install
+npm run dev
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5173/
+```
+
+You can also drag a local `.ply`, `.splat`, or `.ksplat` file into the viewer
+for testing without committing it.
 
 ## Publish through GitHub Pages
 
-1. Create an empty GitHub repository and push this folder to its `main` branch.
-2. In the repository, open **Settings → Secrets and variables → Actions**.
-3. Create a repository secret named `MAPTILER_API_KEY` containing the browser API key.
-4. Open **Settings → Pages** and select **GitHub Actions** as the source.
-5. Push to `main`, or run **Deploy dashboard to GitHub Pages** from the Actions tab.
-6. In MapTiler Cloud, restrict the key to the production origin:
+1. Push this folder to the `main` branch.
+2. Open **Settings -> Pages** and select **GitHub Actions** as the source.
+3. Push to `main`, or run **Deploy dashboard to GitHub Pages** from Actions.
 
-   ```text
-   YOUR_GITHUB_USERNAME.github.io
-   ```
+## Hosting and security notes
 
-   A URL path is not an HTTP origin, so do not include the repository name in the
-   MapTiler allowed-origin value.
-
-## Security note
-
-The built dashboard contains a browser API key. This is normal for client-side
-maps: the key is identification, not a secret. Protect it with MapTiler's allowed
-HTTP-origin restriction. Never use a MapTiler service token in this project.
+- This is static web hosting. If a model file is listed in the dashboard, the
+  browser must be able to download it to render it.
+- Do not commit private source `.ply` files if you do not want visitors to be
+  able to fetch them.
+- GitHub rejects files over 100 MB. Large production models should be hosted on
+  object storage/CDN and listed in the manifest by URL.
+- For a smaller, faster file, convert `.ply` or `.splat` to `.ksplat`.

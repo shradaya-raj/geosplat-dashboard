@@ -1,40 +1,27 @@
-import { Map, SplatModel, config } from "@maptiler/geosplats";
-import "@maptiler/geosplats/dist/maptiler-geosplats.css";
+import * as GaussianSplats3D from "@mkkellogg/gaussian-splats-3d";
 import "./style.css";
 
-const MODEL_ID = "019f266c-4b5c-7c93-92a6-d59287b2f7cb";
-const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
-const MAX_ZOOM = 22;
-const MAX_MAGNIFICATION = 32;
-const MAGNIFICATION_COMMIT_MS = 180;
-const LOADING_FALLBACK_MS = 4000;
+const MANIFEST_URL = `${import.meta.env.BASE_URL}models/manifest.json`;
+const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat"];
 
 const connectionLabel = document.querySelector("#connection-label");
 const loadingPanel = document.querySelector("#loading-panel");
 const loadingTitle = document.querySelector("#loading-title");
 const loadingDetail = document.querySelector("#loading-detail");
-const setupMessage = document.querySelector("#setup-message");
-const compatibilityPanel = document.querySelector("#compatibility-panel");
-const mapElement = document.querySelector("#map");
-const viewerCard = document.querySelector(".viewer-card");
-const basemapSelect = document.querySelector("#basemap-select");
-const resetButton = document.querySelector("#reset-view");
-const closeUpButton = document.querySelector("#close-up");
+const emptyPanel = document.querySelector("#empty-panel");
+const viewerElement = document.querySelector("#viewer");
+const modelSelect = document.querySelector("#model-select");
+const reloadButton = document.querySelector("#reload-model");
+const localModelButton = document.querySelector("#local-model");
+const fileInput = document.querySelector("#file-input");
 const shareButton = document.querySelector("#share-button");
-const copyLinkButton = document.querySelector("#copy-link");
 const toast = document.querySelector("#toast");
+const dropZone = document.querySelector("#drop-zone");
 
-let map;
-let splatModel;
-let loadingFallback;
-let userHasMoved = false;
-let modelIsInteractive = false;
-let modelLoadFailed = false;
-let magnification = 1;
-let appliedMagnification = 1;
-let baseModelScale = null;
-let magnificationFrame;
-let magnificationCommit;
+let viewer;
+let models = [];
+let activeModel = null;
+let activeObjectUrl = null;
 
 function setStatus(label, detail, state = "loading") {
   connectionLabel.textContent = label;
@@ -43,87 +30,198 @@ function setStatus(label, detail, state = "loading") {
   document.documentElement.dataset.state = state;
 }
 
-function captureBaseModelScale() {
-  if (baseModelScale !== null) return true;
-
-  const scale = splatModel?.getScale();
-  if (!Number.isFinite(scale) || scale <= 0) return false;
-  baseModelScale = scale;
-  return true;
-}
-
-function renderMagnificationPreview() {
-  window.cancelAnimationFrame(magnificationFrame);
-  magnificationFrame = window.requestAnimationFrame(() => {
-    mapElement.style.setProperty(
-      "--viewer-magnification",
-      magnification / appliedMagnification
-    );
-    closeUpButton.textContent = magnification > 1
-      ? `Zoom closer · ${magnification.toFixed(magnification < 10 ? 1 : 0)}×`
-      : "Zoom closer";
-  });
-}
-
-function commitMagnification(delay = MAGNIFICATION_COMMIT_MS) {
-  window.clearTimeout(magnificationCommit);
-  const applyMagnification = () => {
-    if (!captureBaseModelScale()) return;
-
-    mapElement.classList.add("is-committing-zoom");
-    splatModel.setScale(baseModelScale * magnification);
-    appliedMagnification = magnification;
-    mapElement.style.setProperty("--viewer-magnification", 1);
-    if (magnification > 1) map.setModelResolution("QUALITY");
-    window.requestAnimationFrame(() => {
-      mapElement.classList.remove("is-committing-zoom");
-    });
-  };
-
-  if (delay === 0) {
-    applyMagnification();
-    return;
-  }
-
-  magnificationCommit = window.setTimeout(applyMagnification, delay);
-}
-
-function setMagnification(value, immediate = false) {
-  if (!captureBaseModelScale()) return false;
-
-  magnification = Math.min(MAX_MAGNIFICATION, Math.max(1, value));
-  renderMagnificationPreview();
-  commitMagnification(immediate ? 0 : MAGNIFICATION_COMMIT_MS);
-  return true;
-}
-
 function showToast(message) {
   toast.textContent = message;
   toast.classList.add("is-visible");
   window.setTimeout(() => toast.classList.remove("is-visible"), 2400);
 }
 
-async function copyDashboardLink() {
-  try {
-    await navigator.clipboard.writeText(window.location.href);
-    showToast("Viewer link copied");
-  } catch {
-    showToast("Copy failed. Use the browser address bar.");
-  }
+function showLoading(title, detail) {
+  loadingPanel.hidden = false;
+  loadingPanel.classList.remove("is-error", "is-complete");
+  setStatus(title, detail);
 }
 
-function dismissLoadingPanel() {
-  window.clearTimeout(loadingFallback);
+function hideLoading() {
   loadingPanel.classList.add("is-complete");
   window.setTimeout(() => {
     loadingPanel.hidden = true;
-  }, 500);
+  }, 300);
+}
+
+function showEmptyState() {
+  emptyPanel.hidden = false;
+  hideLoading();
+  setStatus("Ready for files", "Add hosted models or open a local splat.", "ready");
+}
+
+function hideEmptyState() {
+  emptyPanel.hidden = true;
+}
+
+function cleanObjectUrl() {
+  if (!activeObjectUrl) return;
+  URL.revokeObjectURL(activeObjectUrl);
+  activeObjectUrl = null;
+}
+
+function resetViewer() {
+  if (viewer) {
+    viewer.dispose();
+    viewer = null;
+  }
+
+  viewerElement.replaceChildren();
+
+  viewer = new GaussianSplats3D.Viewer({
+    rootElement: viewerElement,
+    cameraUp: [0, -1, -0.6],
+    initialCameraPosition: [0, -3, 2.2],
+    initialCameraLookAt: [0, 0, 0],
+    sharedMemoryForWorkers: false,
+    gpuAcceleratedSort: false,
+    integerBasedSort: false,
+    halfPrecisionCovariancesOnGPU: true,
+    ignoreDevicePixelRatio: true,
+    sphericalHarmonicsDegree: 0,
+    sceneRevealMode: GaussianSplats3D.SceneRevealMode.Instant,
+    webXRMode: GaussianSplats3D.WebXRMode.None
+  });
+}
+
+function normalizeManifest(rawManifest) {
+  const manifestModels = Array.isArray(rawManifest)
+    ? rawManifest
+    : rawManifest?.models;
+
+  if (!Array.isArray(manifestModels)) return [];
+
+  return manifestModels
+    .map((model, index) => {
+      if (typeof model === "string") {
+        return {
+          name: model.split("/").pop() || `Model ${index + 1}`,
+          path: model
+        };
+      }
+
+      return {
+        name: model.name || model.title || `Model ${index + 1}`,
+        path: model.path || model.url,
+        position: model.position,
+        rotation: model.rotation,
+        scale: model.scale,
+        alphaThreshold: model.alphaThreshold ?? model.splatAlphaRemovalThreshold ?? 1,
+        progressiveLoad: model.progressiveLoad ?? true
+      };
+    })
+    .filter((model) => model.path);
+}
+
+function modelPathToUrl(path) {
+  try {
+    return new URL(path, window.location.href).href;
+  } catch {
+    return path;
+  }
+}
+
+function fillModelSelect() {
+  modelSelect.replaceChildren();
+
+  if (!models.length) {
+    const option = document.createElement("option");
+    option.textContent = "No hosted models";
+    modelSelect.append(option);
+    modelSelect.disabled = true;
+    reloadButton.disabled = true;
+    return;
+  }
+
+  for (const [index, model] of models.entries()) {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = model.name;
+    modelSelect.append(option);
+  }
+
+  modelSelect.disabled = false;
+  reloadButton.disabled = false;
+}
+
+async function loadManifest() {
+  try {
+    const response = await fetch(MANIFEST_URL, { cache: "no-store" });
+    if (!response.ok) return [];
+    return normalizeManifest(await response.json());
+  } catch {
+    return [];
+  }
+}
+
+async function loadModel(model, sourceUrl = model.path) {
+  activeModel = model;
+  hideEmptyState();
+  showLoading("Loading model", model.name);
+
+  try {
+    resetViewer();
+
+    await viewer.addSplatScene(sourceUrl, {
+      splatAlphaRemovalThreshold: model.alphaThreshold ?? 1,
+      showLoadingUI: true,
+      progressiveLoad: model.progressiveLoad ?? true,
+      position: model.position ?? [0, 0, 0],
+      rotation: model.rotation ?? [0, 0, 0, 1],
+      scale: model.scale ?? [1, 1, 1]
+    });
+
+    viewer.start();
+    setStatus("Live", model.name, "ready");
+    hideLoading();
+  } catch (error) {
+    console.error(error);
+    loadingPanel.classList.add("is-error");
+    setStatus(
+      "Model failed",
+      "Check the file path, format, size, and browser console.",
+      "error"
+    );
+    showToast("Could not load model");
+  }
+}
+
+async function loadHostedModel(index) {
+  cleanObjectUrl();
+  const model = models[index];
+  if (!model) return;
+  await loadModel(model, modelPathToUrl(model.path));
+}
+
+async function loadLocalFile(file) {
+  const lowerName = file.name.toLowerCase();
+  if (!SUPPORTED_EXTENSIONS.some((extension) => lowerName.endsWith(extension))) {
+    showToast("Use .ply, .splat, or .ksplat");
+    return;
+  }
+
+  cleanObjectUrl();
+  activeObjectUrl = URL.createObjectURL(file);
+  await loadModel(
+    {
+      name: file.name,
+      path: activeObjectUrl,
+      progressiveLoad: true,
+      alphaThreshold: 1
+    },
+    activeObjectUrl
+  );
 }
 
 async function shareDashboard() {
   const shareData = {
     title: "Gaussian Viewer",
-    text: "Explore this interactive georeferenced 3D model.",
+    text: "Open this self-hosted Gaussian splat viewer.",
     url: window.location.href
   };
 
@@ -132,6 +230,7 @@ async function shareDashboard() {
       await navigator.share(shareData);
       return;
     }
+
     await navigator.clipboard.writeText(shareData.url);
     showToast("Dashboard link copied");
   } catch (error) {
@@ -139,186 +238,68 @@ async function shareDashboard() {
   }
 }
 
+modelSelect.addEventListener("change", () => {
+  loadHostedModel(Number(modelSelect.value));
+});
+
+reloadButton.addEventListener("click", () => {
+  if (activeObjectUrl && activeModel) {
+    loadModel(activeModel, activeObjectUrl);
+    return;
+  }
+
+  loadHostedModel(Number(modelSelect.value));
+});
+
+localModelButton.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  const [file] = fileInput.files;
+  if (file) loadLocalFile(file);
+  fileInput.value = "";
+});
+
 shareButton.addEventListener("click", shareDashboard);
-copyLinkButton.addEventListener("click", copyDashboardLink);
+
+window.addEventListener("dragenter", (event) => {
+  event.preventDefault();
+  dropZone.hidden = false;
+});
+
+window.addEventListener("dragover", (event) => {
+  event.preventDefault();
+});
+
+window.addEventListener("dragleave", (event) => {
+  if (event.relatedTarget) return;
+  dropZone.hidden = true;
+});
+
+window.addEventListener("drop", (event) => {
+  event.preventDefault();
+  dropZone.hidden = true;
+  const [file] = event.dataTransfer.files;
+  if (file) loadLocalFile(file);
+});
 
 async function startDashboard() {
-  if (!API_KEY) {
-    setStatus("Setup needed", "Add a MapTiler API key to load the scene.", "error");
-    setupMessage.hidden = false;
-    loadingPanel.hidden = true;
-    basemapSelect.disabled = true;
-    resetButton.disabled = true;
-    closeUpButton.disabled = true;
+  showLoading("Preparing viewer", "Looking for self-hosted models...");
+  models = await loadManifest();
+  fillModelSelect();
+
+  if (!models.length) {
+    showEmptyState();
     return;
   }
 
-  let gpuAdapter = null;
-  if ("gpu" in navigator) {
-    try {
-      gpuAdapter = await navigator.gpu.requestAdapter({
-        powerPreference: "high-performance"
-      });
-    } catch {
-      gpuAdapter = null;
-    }
-  }
-
-  if (!gpuAdapter) {
-    setStatus(
-      "Device not ready for 3D",
-      "The dashboard is accessible, but this device or browser cannot render the WebGPU model.",
-      "error"
-    );
-    loadingPanel.hidden = true;
-    compatibilityPanel.hidden = false;
-    basemapSelect.disabled = true;
-    resetButton.disabled = true;
-    closeUpButton.disabled = true;
-    return;
-  }
-
-  config.apiKey = API_KEY;
-
-  map = new Map({
-    apiKey: API_KEY,
-    container: "map",
-    center: [0, 20],
-    zoom: 1.5,
-    maxZoom: MAX_ZOOM,
-    pitch: 45,
-    bearing: 0,
-    basemap: "hybrid-v4",
-    navigationControl: true,
-    modelResolutionControl: true
+  const requestedModel = new URLSearchParams(window.location.search).get("model");
+  const requestedIndex = models.findIndex((model) => {
+    const slug = model.slug || model.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    return slug === requestedModel || model.name === requestedModel;
   });
 
-  map.on("load", () => {
-    setStatus("Loading model", "Streaming optimized splat detail…");
-
-    splatModel = new SplatModel({ model: MODEL_ID });
-
-    splatModel.once("load", () => {
-      modelIsInteractive = true;
-      captureBaseModelScale();
-      if (!userHasMoved) splatModel.fit();
-      setStatus("Live", "Model ready", "ready");
-      dismissLoadingPanel();
-      resetButton.disabled = false;
-      closeUpButton.disabled = !captureBaseModelScale();
-    });
-
-    splatModel.once("error", () => {
-      modelLoadFailed = true;
-      window.clearTimeout(loadingFallback);
-      setStatus(
-        "Model unavailable",
-        "Check that the model is published and the API key permits this domain.",
-        "error"
-      );
-      loadingPanel.classList.add("is-error");
-    });
-
-    map.addSplatModel(splatModel);
-
-    const scaleProbe = window.setInterval(() => {
-      if (!captureBaseModelScale()) return;
-      closeUpButton.disabled = false;
-      window.clearInterval(scaleProbe);
-    }, 250);
-    window.setTimeout(() => window.clearInterval(scaleProbe), 30000);
-
-    // Renderable splats often appear before every detail tile has finished
-    // streaming. Do not keep the viewer covered while that continues.
-    loadingFallback = window.setTimeout(() => {
-      if (modelLoadFailed) return;
-
-      modelIsInteractive = true;
-      setStatus("Live", "High-detail tiles are streaming", "ready");
-      dismissLoadingPanel();
-      resetButton.disabled = false;
-      closeUpButton.disabled = !captureBaseModelScale();
-    }, LOADING_FALLBACK_MS);
-  });
-
-  map.on("error", () => {
-    if (modelIsInteractive) return;
-
-    setStatus(
-      "Connection error",
-      "Check your API key, allowed origins, and network connection.",
-      "error"
-    );
-    loadingPanel.classList.add("is-error");
-  });
-
-  basemapSelect.addEventListener("change", (event) => {
-    map.setBasemap(event.target.value);
-  });
-
-  resetButton.addEventListener("click", () => {
-    if (!splatModel) return;
-    setMagnification(1, true);
-    splatModel.fit();
-  });
-
-  closeUpButton.addEventListener("click", () => {
-    const center = splatModel?.getCenter();
-    if (!center) return;
-
-    userHasMoved = true;
-    const nextMagnification = Math.min(
-      MAX_MAGNIFICATION,
-      magnification === 1 ? 2 : magnification * 2
-    );
-    setMagnification(nextMagnification);
-    map.jumpTo({
-      center,
-      zoom: MAX_ZOOM,
-      pitch: 65,
-      bearing: map.getBearing()
-    });
-    showToast(
-      magnification === MAX_MAGNIFICATION
-        ? `Maximum close-up: ${MAX_MAGNIFICATION}×`
-        : `Close-up: ${magnification}×`
-    );
-  });
-
-  mapElement.addEventListener("pointerdown", () => {
-    userHasMoved = true;
-  });
-
-  viewerCard.addEventListener(
-    "wheel",
-    (event) => {
-      if (event.target.closest("button, select")) return;
-
-      userHasMoved = true;
-
-      const currentZoom = map.getZoom();
-      const nearMapZoomLimit = currentZoom >= map.getMaxZoom() - 2;
-      const zoomingIn = event.deltaY < 0;
-      const zoomingOutFromMagnification = event.deltaY > 0 && magnification > 1;
-
-      if ((zoomingIn && nearMapZoomLimit) || zoomingOutFromMagnification) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const deltaMultiplier = event.deltaMode === 1
-          ? 16
-          : event.deltaMode === 2
-            ? window.innerHeight
-            : 1;
-        const normalizedDelta = Math.abs(event.deltaY) * deltaMultiplier;
-        const factor = Math.exp(Math.min(normalizedDelta * 0.003, 0.35));
-        setMagnification(
-          zoomingIn ? magnification * factor : magnification / factor
-        );
-      }
-    },
-    { passive: false, capture: true }
-  );
+  const modelIndex = requestedIndex >= 0 ? requestedIndex : 0;
+  modelSelect.value = String(modelIndex);
+  await loadHostedModel(modelIndex);
 }
 
 startDashboard();
