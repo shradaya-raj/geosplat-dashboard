@@ -1,10 +1,10 @@
 import { open } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 
-const [inputPath, outputPath] = process.argv.slice(2);
+const [inputPath, outputPath, maxSplatsArg] = process.argv.slice(2);
 
 if (!inputPath || !outputPath) {
-  console.error("Usage: node scripts/convert-ply-to-splat.mjs input.ply output.splat");
+  console.error("Usage: node scripts/convert-ply-to-splat.mjs input.ply output.splat [maxSplats]");
   process.exit(1);
 }
 
@@ -60,9 +60,15 @@ const headerEnd = markerIndex + marker.length;
 const dataOffset = headerEnd + (probe[headerEnd] === 13 && probe[headerEnd + 1] === 10 ? 2 : 1);
 const header = probeText.slice(0, headerEnd);
 const vertexCount = parseHeader(header);
+const maxSplats = maxSplatsArg ? Number(maxSplatsArg) : vertexCount;
+const sampleStride = Math.max(1, Math.ceil(vertexCount / maxSplats));
+const outputCount = Math.ceil(vertexCount / sampleStride);
 const output = createWriteStream(outputPath);
 
-console.log(`Converting ${vertexCount.toLocaleString()} splats`);
+console.log(
+  `Converting ${vertexCount.toLocaleString()} splats` +
+  (sampleStride > 1 ? ` with stride ${sampleStride} (${outputCount.toLocaleString()} output splats)` : "")
+);
 
 let processed = 0;
 let position = dataOffset;
@@ -77,11 +83,18 @@ while (processed < vertexCount) {
     throw new Error(`Unexpected EOF after ${processed.toLocaleString()} rows.`);
   }
 
-  const outputBuffer = Buffer.allocUnsafe(rows * OUTPUT_ROW_BYTES);
+  const selectedRows = [];
 
   for (let row = 0; row < rows; row++) {
+    const globalRow = processed + row;
+    if (globalRow % sampleStride === 0) selectedRows.push(row);
+  }
+
+  const outputBuffer = Buffer.allocUnsafe(selectedRows.length * OUTPUT_ROW_BYTES);
+
+  for (const [outRow, row] of selectedRows.entries()) {
     const inBase = row * INPUT_ROW_BYTES;
-    const outBase = row * OUTPUT_ROW_BYTES;
+    const outBase = outRow * OUTPUT_ROW_BYTES;
 
     const x = inputBuffer.readFloatLE(inBase);
     const y = inputBuffer.readFloatLE(inBase + 4);
@@ -120,7 +133,7 @@ while (processed < vertexCount) {
     outputBuffer[outBase + 31] = quatByte(qz);
   }
 
-  if (!output.write(outputBuffer)) {
+  if (outputBuffer.length && !output.write(outputBuffer)) {
     await new Promise((resolve) => output.once("drain", resolve));
   }
 
