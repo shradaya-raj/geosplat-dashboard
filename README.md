@@ -86,15 +86,19 @@ https://shradaya-raj.github.io/geosplat-dashboard/?model=model-name
 Use the **Share** button after loading a hosted model to copy the direct model
 link.
 
-## Upload from any computer without command prompt
+## Submit from any computer without command prompt
 
-Open the live dashboard and click **Upload model**. It links to:
+Open the live dashboard and click **Submit model**. It opens the OneDrive /
+SharePoint submission folder:
 
-1. the GitHub Release where model files are attached;
-2. the GitHub Pages deployment workflow that republishes the dashboard.
+```text
+https://galliexpress-my.sharepoint.com/:f:/g/personal/shradaya_poudel_gallimaps_com/IgCP-tpfhfvhRqIu3Sv31GiFAYeVoDi3P197ExUsbbHXu_k
+```
 
-This keeps uploads secure because GitHub handles authentication. The public
-dashboard never stores a GitHub token.
+Submitted files are review-only. After approval, the owner publishes the model
+to the GitHub Release named `models` and runs the GitHub Pages deployment
+workflow. This keeps GitHub access private while allowing people to submit files
+from any device.
 
 ## Local testing
 

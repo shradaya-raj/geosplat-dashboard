@@ -437,7 +437,7 @@ async function loadLocalFile(file) {
 async function shareDashboard() {
   const shareUrl = getShareUrl();
   if (!shareUrl) {
-    showToast("Upload this model first, then share the hosted link.");
+    showToast("Submit this model for approval before sharing.");
     showUploadPanel();
     return;
   }
