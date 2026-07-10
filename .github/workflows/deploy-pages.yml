@@ -31,9 +31,19 @@ jobs:
         run: npm ci
 
       - name: Build dashboard
-        env:
-          VITE_MAPTILER_API_KEY: ${{ secrets.MAPTILER_API_KEY }}
         run: npm run build
+
+      - name: Add large model files from GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist/models
+          if gh release view models >/dev/null 2>&1; then
+            gh release download models --dir dist/models --clobber || true
+            node .github/scripts/write-model-manifest.mjs dist/models
+          else
+            echo '{"models":[]}' > dist/models/manifest.json
+          fi
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
