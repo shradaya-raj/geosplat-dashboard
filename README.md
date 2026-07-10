@@ -68,6 +68,24 @@ GitHub Releases support assets up to 2 GB each. GitHub Pages is still intended
 for static sites, so keep the final published dashboard preferably below 1 GB
 total for reliable deployments.
 
+## Share a model link
+
+There are two loading modes:
+
+- **Open file / drag-and-drop**: local preview only. The model stays on your
+  computer, so other people cannot see it from a shared link.
+- **GitHub Release model**: public/shareable. Upload the model to the `models`
+  Release, let GitHub Pages redeploy, then share the dashboard URL.
+
+After a hosted model is loaded, the dashboard URL becomes:
+
+```text
+https://shradaya-raj.github.io/geosplat-dashboard/?model=model-name
+```
+
+Use the **Share** button after loading a hosted model to copy the direct model
+link.
+
 ## Local testing
 
 ```bash

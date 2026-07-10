@@ -10,6 +10,14 @@ function titleFromFilename(filename) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 const entries = await readdir(modelsDir, { withFileTypes: true }).catch(() => []);
 
 const models = entries
@@ -17,15 +25,20 @@ const models = entries
   .map((entry) => entry.name)
   .filter((filename) => supportedExtensions.has(extname(filename).toLowerCase()))
   .sort((a, b) => a.localeCompare(b))
-  .map((filename) => ({
-    name: titleFromFilename(filename),
-    path: `./models/${filename}`,
-    progressiveLoad: true,
-    alphaThreshold: 1,
-    position: [0, 0, 0],
-    rotation: [0, 0, 0, 1],
-    scale: [1, 1, 1]
-  }));
+  .map((filename) => {
+    const name = titleFromFilename(filename);
+
+    return {
+      name,
+      slug: slugify(filename),
+      path: `./models/${filename}`,
+      progressiveLoad: false,
+      alphaThreshold: 0,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0, 1],
+      scale: [1, 1, 1]
+    };
+  });
 
 await writeFile(
   join(modelsDir, "manifest.json"),

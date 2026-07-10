@@ -35,6 +35,27 @@ let activeObjectUrl = null;
 let lastFrame = null;
 let pointModeEnabled = false;
 
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function updateShareUrl(model) {
+  if (!model || activeObjectUrl) return;
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("model", model.slug || slugify(model.name));
+  window.history.replaceState({}, "", url);
+}
+
+function getShareUrl() {
+  if (activeObjectUrl) return null;
+  return window.location.href;
+}
+
 function setStatus(label, detail, state = "loading") {
   connectionLabel.textContent = label;
   loadingTitle.textContent = label;
@@ -193,14 +214,18 @@ function normalizeManifest(rawManifest) {
   return manifestModels
     .map((model, index) => {
       if (typeof model === "string") {
+        const name = model.split("/").pop() || `Model ${index + 1}`;
         return {
-          name: model.split("/").pop() || `Model ${index + 1}`,
+          name,
+          slug: slugify(name),
           path: model
         };
       }
 
+      const name = model.name || model.title || `Model ${index + 1}`;
       return {
-        name: model.name || model.title || `Model ${index + 1}`,
+        name,
+        slug: model.slug || slugify(name || model.path || model.url),
         path: model.path || model.url,
         format: model.format,
         position: model.position,
@@ -328,6 +353,7 @@ async function loadHostedModel(index) {
   const model = models[index];
   if (!model) return;
   await loadModel(model, modelPathToUrl(model.path));
+  updateShareUrl(model);
 }
 
 async function loadLocalFile(file) {
@@ -352,10 +378,18 @@ async function loadLocalFile(file) {
 }
 
 async function shareDashboard() {
+  const shareUrl = getShareUrl();
+  if (!shareUrl) {
+    showToast("Upload this model first, then share the hosted link.");
+    return;
+  }
+
   const shareData = {
     title: "Gaussian Viewer",
-    text: "Open this self-hosted Gaussian splat viewer.",
-    url: window.location.href
+    text: activeModel
+      ? `Open ${activeModel.name} in Gaussian Viewer.`
+      : "Open this self-hosted Gaussian splat viewer.",
+    url: shareUrl
   };
 
   try {
@@ -365,7 +399,7 @@ async function shareDashboard() {
     }
 
     await navigator.clipboard.writeText(shareData.url);
-    showToast("Dashboard link copied");
+    showToast(activeModel ? "Model link copied" : "Dashboard link copied");
   } catch (error) {
     if (error?.name !== "AbortError") showToast("Could not copy the link");
   }
@@ -434,7 +468,7 @@ async function startDashboard() {
 
   const requestedModel = new URLSearchParams(window.location.search).get("model");
   const requestedIndex = models.findIndex((model) => {
-    const slug = model.slug || model.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const slug = model.slug || slugify(model.name);
     return slug === requestedModel || model.name === requestedModel;
   });
 
