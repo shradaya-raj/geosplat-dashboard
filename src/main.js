@@ -292,7 +292,7 @@ function getExtensionFromPath(path) {
 }
 
 function getSceneFormat(model) {
-  if (model.format && GaussianSplats3D.SceneFormat[model.format]) {
+  if (model.format && GaussianSplats3D.SceneFormat[model.format] !== undefined) {
     return GaussianSplats3D.SceneFormat[model.format];
   }
 
@@ -357,7 +357,7 @@ async function loadModel(model, sourceUrl = model.path) {
     pointModeEnabled = false;
 
     const format = getSceneFormat(model);
-    if (!format) {
+    if (format === undefined || format === null) {
       throw new Error("Unsupported or unknown Gaussian splat file format.");
     }
 
