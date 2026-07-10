@@ -1,6 +1,6 @@
 # Gaussian Viewer
 
-A self-hosted Gaussian splat dashboard for `.ply`, `.splat`, and `.ksplat`
+A self-hosted Gaussian splat dashboard for `.ply`, `.splat`, `.ksplat`, and `.spz`
 models. It does not use MapTiler or a MapTiler API key.
 
 ## Add hosted models under 100 MB
@@ -62,6 +62,7 @@ Supported release asset formats:
 - `.ply`
 - `.splat`
 - `.ksplat`
+- `.spz`
 
 GitHub Releases support assets up to 2 GB each. GitHub Pages is still intended
 for static sites, so keep the final published dashboard preferably below 1 GB
@@ -80,7 +81,7 @@ Then open:
 http://127.0.0.1:5173/
 ```
 
-You can also drag a local `.ply`, `.splat`, or `.ksplat` file into the viewer
+You can also drag a local `.ply`, `.splat`, `.ksplat`, or `.spz` file into the viewer
 for testing without committing it.
 
 ## Publish through GitHub Pages

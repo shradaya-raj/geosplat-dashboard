@@ -8,7 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$supportedExtensions = @(".ply", ".splat", ".ksplat")
+$supportedExtensions = @(".ply", ".splat", ".ksplat", ".spz")
 
 $ghCommand = Get-Command gh -ErrorAction SilentlyContinue
 if (-not $ghCommand) {
@@ -32,7 +32,7 @@ foreach ($item in $Path) {
   $extension = [System.IO.Path]::GetExtension($resolvedPath).ToLowerInvariant()
 
   if ($supportedExtensions -notcontains $extension) {
-    throw "Unsupported model file '$resolvedPath'. Use .ply, .splat, or .ksplat."
+    throw "Unsupported model file '$resolvedPath'. Use .ply, .splat, .ksplat, or .spz."
   }
 
   Write-Host "Uploading $resolvedPath to release '$Tag'..."

@@ -2,7 +2,13 @@ import * as GaussianSplats3D from "@mkkellogg/gaussian-splats-3d";
 import "./style.css";
 
 const MANIFEST_URL = `${import.meta.env.BASE_URL}models/manifest.json`;
-const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat"];
+const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat", ".spz"];
+const SCENE_FORMAT_BY_EXTENSION = {
+  ".ply": GaussianSplats3D.SceneFormat.Ply,
+  ".splat": GaussianSplats3D.SceneFormat.Splat,
+  ".ksplat": GaussianSplats3D.SceneFormat.KSplat,
+  ".spz": GaussianSplats3D.SceneFormat.Spz
+};
 
 const connectionLabel = document.querySelector("#connection-label");
 const loadingPanel = document.querySelector("#loading-panel");
@@ -108,6 +114,7 @@ function normalizeManifest(rawManifest) {
       return {
         name: model.name || model.title || `Model ${index + 1}`,
         path: model.path || model.url,
+        format: model.format,
         position: model.position,
         rotation: model.rotation,
         scale: model.scale,
@@ -124,6 +131,20 @@ function modelPathToUrl(path) {
   } catch {
     return path;
   }
+}
+
+function getExtensionFromPath(path) {
+  const cleanPath = path.split("?")[0].split("#")[0].toLowerCase();
+  return SUPPORTED_EXTENSIONS.find((extension) => cleanPath.endsWith(extension));
+}
+
+function getSceneFormat(model) {
+  if (model.format && GaussianSplats3D.SceneFormat[model.format]) {
+    return GaussianSplats3D.SceneFormat[model.format];
+  }
+
+  const extension = getExtensionFromPath(model.filename || model.path || "");
+  return extension ? SCENE_FORMAT_BY_EXTENSION[extension] : undefined;
 }
 
 function fillModelSelect() {
@@ -167,7 +188,13 @@ async function loadModel(model, sourceUrl = model.path) {
   try {
     resetViewer();
 
+    const format = getSceneFormat(model);
+    if (!format) {
+      throw new Error("Unsupported or unknown Gaussian splat file format.");
+    }
+
     await viewer.addSplatScene(sourceUrl, {
+      format,
       splatAlphaRemovalThreshold: model.alphaThreshold ?? 1,
       showLoadingUI: true,
       progressiveLoad: model.progressiveLoad ?? true,
@@ -184,10 +211,10 @@ async function loadModel(model, sourceUrl = model.path) {
     loadingPanel.classList.add("is-error");
     setStatus(
       "Model failed",
-      "Check the file path, format, size, and browser console.",
+      error?.message || "Check the file path, format, size, and browser console.",
       "error"
     );
-    showToast("Could not load model");
+    showToast(error?.message || "Could not load model");
   }
 }
 
@@ -211,6 +238,7 @@ async function loadLocalFile(file) {
     {
       name: file.name,
       path: activeObjectUrl,
+      filename: file.name,
       progressiveLoad: true,
       alphaThreshold: 1
     },

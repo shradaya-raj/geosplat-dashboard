@@ -2,7 +2,7 @@ import { readdir, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 
 const modelsDir = process.argv[2] || "dist/models";
-const supportedExtensions = new Set([".ply", ".splat", ".ksplat"]);
+const supportedExtensions = new Set([".ply", ".splat", ".ksplat", ".spz"]);
 
 function titleFromFilename(filename) {
   return basename(filename, extname(filename))
