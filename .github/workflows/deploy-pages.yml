@@ -33,14 +33,14 @@ jobs:
       - name: Build dashboard
         run: npm run build
 
-      - name: Add hosted model manifest from GitHub Release
+      - name: Add hosted models from GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p dist/models
           if gh release view models >/dev/null 2>&1; then
-            gh api repos/${{ github.repository }}/releases/tags/models --jq '.assets' > release-assets.json
-            node .github/scripts/write-release-model-manifest.mjs release-assets.json dist/models/manifest.json
+            gh release download models --pattern "*.splat" --pattern "*.ksplat" --pattern "*.spz" --dir dist/models --clobber || true
+            node .github/scripts/write-model-manifest.mjs dist/models
           else
             echo '{"models":[]}' > dist/models/manifest.json
           fi
