@@ -1,4 +1,5 @@
 import * as GaussianSplats3D from "@mkkellogg/gaussian-splats-3d";
+import * as THREE from "three";
 import "./style.css";
 
 const MANIFEST_URL = `${import.meta.env.BASE_URL}models/manifest.json`;
@@ -18,6 +19,7 @@ const emptyPanel = document.querySelector("#empty-panel");
 const viewerElement = document.querySelector("#viewer");
 const modelSelect = document.querySelector("#model-select");
 const reloadButton = document.querySelector("#reload-model");
+const frameButton = document.querySelector("#frame-model");
 const localModelButton = document.querySelector("#local-model");
 const fileInput = document.querySelector("#file-input");
 const shareButton = document.querySelector("#share-button");
@@ -28,6 +30,7 @@ let viewer;
 let models = [];
 let activeModel = null;
 let activeObjectUrl = null;
+let lastFrame = null;
 
 function setStatus(label, detail, state = "loading") {
   connectionLabel.textContent = label;
@@ -95,6 +98,54 @@ function resetViewer() {
   });
 }
 
+function computeModelFrame() {
+  const splatMesh = viewer?.getSplatMesh?.();
+  const splatCount = splatMesh?.getSplatCount?.() ?? 0;
+  if (!splatMesh || splatCount <= 0) return null;
+
+  const center = new THREE.Vector3();
+  const min = new THREE.Vector3(Infinity, Infinity, Infinity);
+  const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  const sampleCount = Math.min(4000, splatCount);
+  const step = Math.max(1, Math.floor(splatCount / sampleCount));
+
+  for (let index = 0; index < splatCount; index += step) {
+    splatMesh.getSplatCenter(index, center, true);
+    min.min(center);
+    max.max(center);
+  }
+
+  if (!Number.isFinite(min.x) || !Number.isFinite(max.x)) return null;
+
+  const target = min.clone().add(max).multiplyScalar(0.5);
+  const size = max.clone().sub(min);
+  const radius = Math.max(size.length() * 0.55, 0.5);
+
+  return { target, radius, splatCount };
+}
+
+function frameModel() {
+  const frame = computeModelFrame() || lastFrame;
+  if (!frame || !viewer?.camera || !viewer?.controls) return false;
+
+  lastFrame = frame;
+  const distance = Math.max(frame.radius * 2.4, 1.5);
+  const cameraOffset = new THREE.Vector3(distance, -distance, distance * 0.65);
+
+  viewer.camera.position.copy(frame.target).add(cameraOffset);
+  viewer.camera.up.set(0, 0, 1);
+  viewer.camera.near = Math.max(distance / 1000, 0.01);
+  viewer.camera.far = Math.max(distance * 100, 1000);
+  viewer.camera.lookAt(frame.target);
+  viewer.camera.updateProjectionMatrix();
+
+  viewer.controls.target.copy(frame.target);
+  viewer.controls.update();
+  viewer.forceRenderNextFrame?.();
+  frameButton.disabled = false;
+  return true;
+}
+
 function normalizeManifest(rawManifest) {
   const manifestModels = Array.isArray(rawManifest)
     ? rawManifest
@@ -119,7 +170,7 @@ function normalizeManifest(rawManifest) {
         rotation: model.rotation,
         scale: model.scale,
         alphaThreshold: model.alphaThreshold ?? model.splatAlphaRemovalThreshold ?? 1,
-        progressiveLoad: model.progressiveLoad ?? true
+        progressiveLoad: model.progressiveLoad ?? false
       };
     })
     .filter((model) => model.path);
@@ -168,6 +219,7 @@ function fillModelSelect() {
 
   modelSelect.disabled = false;
   reloadButton.disabled = false;
+  frameButton.disabled = true;
 }
 
 async function loadManifest() {
@@ -187,6 +239,8 @@ async function loadModel(model, sourceUrl = model.path) {
 
   try {
     resetViewer();
+    frameButton.disabled = true;
+    lastFrame = null;
 
     const format = getSceneFormat(model);
     if (!format) {
@@ -197,13 +251,16 @@ async function loadModel(model, sourceUrl = model.path) {
       format,
       splatAlphaRemovalThreshold: model.alphaThreshold ?? 1,
       showLoadingUI: true,
-      progressiveLoad: model.progressiveLoad ?? true,
+      progressiveLoad: model.progressiveLoad ?? false,
       position: model.position ?? [0, 0, 0],
       rotation: model.rotation ?? [0, 0, 0, 1],
       scale: model.scale ?? [1, 1, 1]
     });
 
     viewer.start();
+    window.setTimeout(() => {
+      if (!frameModel()) showToast("Model loaded. Try dragging or scrolling to find it.");
+    }, 100);
     setStatus("Live", model.name, "ready");
     hideLoading();
   } catch (error) {
@@ -239,7 +296,7 @@ async function loadLocalFile(file) {
       name: file.name,
       path: activeObjectUrl,
       filename: file.name,
-      progressiveLoad: true,
+      progressiveLoad: false,
       alphaThreshold: 1
     },
     activeObjectUrl
@@ -277,6 +334,10 @@ reloadButton.addEventListener("click", () => {
   }
 
   loadHostedModel(Number(modelSelect.value));
+});
+
+frameButton.addEventListener("click", () => {
+  if (!frameModel()) showToast("Could not frame this model");
 });
 
 localModelButton.addEventListener("click", () => fileInput.click());
