@@ -30,6 +30,7 @@ const pointModeButton = document.querySelector("#point-mode");
 const localModelButton = document.querySelector("#local-model");
 const fileInput = document.querySelector("#file-input");
 const shareButton = document.querySelector("#share-button");
+const themeToggle = document.querySelector("#theme-toggle");
 const uploadHelpButton = document.querySelector("#upload-help-button");
 const uploadPanel = document.querySelector("#upload-panel");
 const closeUploadPanel = document.querySelector("#close-upload-panel");
@@ -46,6 +47,15 @@ let lastFrame = null;
 let pointModeEnabled = false;
 let activeLoadToken = 0;
 let loadingWatchdog = null;
+
+function applyTheme(theme) {
+  const normalizedTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = normalizedTheme;
+  window.localStorage.setItem("gaussian-viewer-theme", normalizedTheme);
+  if (themeToggle) {
+    themeToggle.textContent = normalizedTheme === "dark" ? "Light theme" : "Dark theme";
+  }
+}
 
 function slugify(value) {
   return String(value || "")
@@ -745,6 +755,10 @@ fileInput.addEventListener("change", () => {
 });
 
 shareButton.addEventListener("click", shareDashboard);
+themeToggle?.addEventListener("click", () => {
+  const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(nextTheme);
+});
 uploadHelpButton.addEventListener("click", showUploadPanel);
 closeUploadPanel.addEventListener("click", hideUploadPanel);
 uploadPanel.addEventListener("click", (event) => {
@@ -771,6 +785,8 @@ window.addEventListener("drop", (event) => {
   const [file] = event.dataTransfer.files;
   if (file) loadLocalFile(file);
 });
+
+applyTheme(window.localStorage.getItem("gaussian-viewer-theme") || "light");
 
 async function startDashboard() {
   showLoading("Preparing viewer", "Looking for self-hosted models...");

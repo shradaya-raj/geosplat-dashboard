@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#071211" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#f3f6ef" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta
       name="description"
-      content="Self-hosted Gaussian splat viewer for PLY, SPLAT, and KSPLAT models"
+      content="Self-hosted Gaussian splat viewer for PLY, SPLAT, KSPLAT, and SPZ models"
     />
     <title>Gaussian Viewer</title>
   </head>
@@ -17,7 +17,10 @@
       <header class="topbar">
         <a class="brand" href="./" aria-label="Gaussian Viewer home">
           <span class="brand-mark" aria-hidden="true"></span>
-          <strong>Gaussian Viewer</strong>
+          <span>
+            <strong>Gaussian Viewer</strong>
+            <small>Hosted splat review portal</small>
+          </span>
         </a>
 
         <div class="topbar-actions">
@@ -25,6 +28,9 @@
             <span class="live-dot"></span>
             <span id="connection-label">Initializing</span>
           </div>
+          <button id="theme-toggle" class="button button-secondary" type="button">
+            Dark theme
+          </button>
           <button id="share-button" class="button button-primary" type="button">
             Share
           </button>
@@ -35,23 +41,80 @@
       </header>
 
       <main class="dashboard">
-        <section class="viewer-card" aria-label="Interactive Gaussian splat viewer">
-          <div id="viewer" class="viewer"></div>
-
-          <aside class="portal-panel" aria-label="Gaussian viewer workflow">
+        <aside class="side-panel" aria-label="Model controls and details">
+          <section class="panel-card intro-card">
             <span class="eyebrow">Gaussian model portal</span>
-            <h1>Load, review, and share captured blocks.</h1>
+            <h1>Review captured blocks clearly.</h1>
             <p>
-              Select one or more hosted splat blocks, stream them into the viewer,
-              and share the exact scene with a single link.
+              Load one model or combine multiple hosted blocks from the same area.
+              Keep the viewer clean while controls stay here.
             </p>
+          </section>
+
+          <section class="panel-card">
+            <div class="section-title">
+              <span>Hosted models</span>
+              <small>Ctrl / Shift for multiple</small>
+            </div>
+            <label class="select-control">
+              <span class="visually-hidden">Models</span>
+              <select id="model-select" aria-label="Models" multiple size="5" disabled>
+                <option>No hosted models</option>
+              </select>
+            </label>
+
+            <div class="control-grid">
+              <button id="load-selected" class="icon-button button-wide" type="button" disabled>
+                Load selected
+              </button>
+              <button id="reload-model" class="icon-button" type="button" disabled>
+                Reload
+              </button>
+              <button id="frame-model" class="icon-button" type="button" disabled>
+                Frame
+              </button>
+              <button id="point-mode" class="icon-button" type="button" disabled>
+                Points
+              </button>
+              <button id="local-model" class="icon-button" type="button">
+                Open file
+              </button>
+            </div>
+            <input id="file-input" type="file" accept=".ply,.splat,.ksplat,.spz" hidden />
+          </section>
+
+          <section class="panel-card">
+            <div class="section-title">
+              <span>Scene details</span>
+              <small>Live status</small>
+            </div>
+            <div id="model-info" class="model-info" hidden></div>
+            <p class="panel-note">
+              For large sites, publish the same area as separate aligned blocks and load
+              only the blocks you need.
+            </p>
+          </section>
+
+          <section class="panel-card workflow-panel">
+            <div class="section-title">
+              <span>Publishing workflow</span>
+            </div>
             <div class="workflow-cards" aria-label="Publishing workflow">
               <span>Upload</span>
               <span>Process</span>
               <span>Host</span>
               <span>Share</span>
             </div>
-          </aside>
+            <p class="panel-note">
+              New submissions should trigger an email to
+              <a href="mailto:shradayastocks0@gmail.com">shradayastocks0@gmail.com</a>
+              through OneDrive/SharePoint alerts or Power Automate.
+            </p>
+          </section>
+        </aside>
+
+        <section class="viewer-card" aria-label="Interactive Gaussian splat viewer">
+          <div id="viewer" class="viewer"></div>
 
           <div id="loading-panel" class="loading-panel">
             <span class="loader"></span>
@@ -62,17 +125,11 @@
           <div id="empty-panel" class="empty-panel" hidden>
             <span class="empty-icon" aria-hidden="true">GS</span>
             <div class="empty-copy">
-              <strong>Add your Gaussian splat files to this dashboard.</strong>
+              <strong>Add Gaussian splat files to this dashboard.</strong>
               <p>
-                Put <code>.ply</code>, <code>.splat</code>, or <code>.ksplat</code>
-                files in <code>public/models</code>, then list them in
-                <code>public/models/manifest.json</code>. You can also drag a file
-                here for local testing.
+                Hosted models appear in the left panel after the owner processes
+                and publishes approved uploads.
               </p>
-              <label class="button button-primary file-button">
-                Load local file
-                <input id="file-input" type="file" accept=".ply,.splat,.ksplat,.spz" />
-              </label>
             </div>
           </div>
 
@@ -81,38 +138,11 @@
             <div class="empty-copy">
               <strong>Hosted models are ready.</strong>
               <p>
-                Choose one or more hosted blocks, then click Load selected.
-                Hold Ctrl or Shift to select multiple blocks from the same area.
+                Select one or more models from the left panel, then click
+                Load selected.
               </p>
             </div>
           </div>
-
-          <div class="viewer-toolbar">
-            <label class="select-control">
-              <span class="visually-hidden">Model</span>
-              <select id="model-select" aria-label="Models" multiple size="2" disabled>
-                <option>No hosted models</option>
-              </select>
-            </label>
-
-            <button id="load-selected" class="icon-button" type="button" disabled>
-              Load selected
-            </button>
-            <button id="reload-model" class="icon-button" type="button" disabled>
-              Reload
-            </button>
-            <button id="frame-model" class="icon-button" type="button" disabled>
-              Frame
-            </button>
-            <button id="point-mode" class="icon-button" type="button" disabled>
-              Points
-            </button>
-            <button id="local-model" class="icon-button" type="button">
-              Open file
-            </button>
-          </div>
-
-          <div id="model-info" class="model-info" hidden></div>
 
           <div id="drop-zone" class="drop-zone" hidden>
             <span>Drop your Gaussian splat file to preview it</span>
@@ -120,7 +150,7 @@
 
           <div id="upload-panel" class="upload-panel" hidden>
             <button id="close-upload-panel" class="close-button" type="button" aria-label="Close upload guide">
-              ×
+              &times;
             </button>
             <span class="empty-icon" aria-hidden="true">UP</span>
             <div class="empty-copy">
