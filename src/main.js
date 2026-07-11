@@ -170,8 +170,11 @@ function updateAccountUI(session = currentSession) {
 
   if (!isBackendEnabled()) {
     accountStatus.textContent = "Static viewer mode";
-    accountHint.textContent = "Backend not connected yet. Public demo/hosted models are shown.";
-    accountAction.hidden = true;
+    accountHint.textContent = "Private sign-in needs the backend/domain API. Public demo/hosted models are shown for now.";
+    accountAction.hidden = false;
+    accountAction.href = "#backend-setup";
+    accountAction.textContent = "Backend setup pending";
+    accountAction.setAttribute("aria-disabled", "true");
     return;
   }
 
@@ -183,6 +186,7 @@ function updateAccountUI(session = currentSession) {
     accountAction.hidden = !logoutUrl;
     accountAction.href = logoutUrl || "#";
     accountAction.textContent = "Sign out";
+    accountAction.removeAttribute("aria-disabled");
     return;
   }
 
@@ -192,6 +196,7 @@ function updateAccountUI(session = currentSession) {
   accountAction.hidden = !loginUrl;
   accountAction.href = loginUrl || "#";
   accountAction.textContent = "Sign in";
+  accountAction.removeAttribute("aria-disabled");
 }
 
 function showUploadPanel() {
@@ -812,6 +817,11 @@ fileInput.addEventListener("change", () => {
 });
 
 shareButton.addEventListener("click", shareDashboard);
+accountAction?.addEventListener("click", (event) => {
+  if (accountAction.getAttribute("aria-disabled") !== "true") return;
+  event.preventDefault();
+  showToast("Sign in needs the backend API connected first.");
+});
 themeToggle?.addEventListener("click", () => {
   const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   applyTheme(nextTheme);

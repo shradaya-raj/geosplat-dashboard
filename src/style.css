@@ -232,6 +232,12 @@ html[data-state="error"] .live-dot {
   box-shadow: 0 8px 22px rgba(30, 55, 44, 0.1);
 }
 
+.button[aria-disabled="true"] {
+  cursor: help;
+  opacity: 0.76;
+  border-style: dashed;
+}
+
 .dashboard {
   flex: 1 1 auto;
   min-height: 0;
