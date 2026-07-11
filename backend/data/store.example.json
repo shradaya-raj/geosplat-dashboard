@@ -1,0 +1,16 @@
+{
+  "users": [],
+  "models": [
+    {
+      "id": "demo",
+      "name": "Demo Gaussian model",
+      "slug": "demo",
+      "path": "",
+      "filename": "demo.splat",
+      "status": "published",
+      "isDemo": true,
+      "progressiveLoad": true
+    }
+  ],
+  "shares": []
+}

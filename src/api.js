@@ -35,7 +35,9 @@ export async function getSession() {
 }
 
 export async function getUserModels() {
-  const payload = await apiFetch("/api/models");
+  const shareToken = new URLSearchParams(window.location.search).get("share");
+  const query = shareToken ? `?share=${encodeURIComponent(shareToken)}` : "";
+  const payload = await apiFetch(`/api/models${query}`);
   if (!payload) return null;
   return Array.isArray(payload) ? { models: payload } : payload;
 }

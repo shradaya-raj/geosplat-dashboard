@@ -116,6 +116,26 @@ http://127.0.0.1:5173/
 You can also drag a local `.ply`, `.splat`, `.ksplat`, or `.spz` file into the viewer
 for testing without committing it.
 
+## Private user workspaces
+
+The dashboard is prepared for a backend API. Without the backend, it runs in
+static GitHub Pages mode. With the backend connected, each signed-in user can
+see only their own published OneDrive models, while new users can receive a demo
+model fallback.
+
+Frontend environment:
+
+```text
+VITE_GV_API_BASE_URL=https://api.yourdomain.com
+VITE_GV_OWNER_EMAIL=shradaya.poudel@gallimaps.com
+```
+
+Backend code and setup steps live in:
+
+```text
+backend/
+```
+
 ## Publish through GitHub Pages
 
 1. Push this folder to the `main` branch.
