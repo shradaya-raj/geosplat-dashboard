@@ -1,8 +1,9 @@
 import * as GaussianSplats3D from "@mkkellogg/gaussian-splats-3d";
 import * as THREE from "three";
+import { createModelShare, getLoginUrl, getLogoutUrl, getSession, getUserModels } from "./api.js";
+import { APP_CONFIG, isBackendEnabled } from "./config.js";
 import "./style.css";
 
-const MANIFEST_URL = `${import.meta.env.BASE_URL}models/manifest.json`;
 const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat", ".spz"];
 const MAX_LOCAL_PREVIEW_BYTES = 350 * 1024 * 1024;
 const MAX_LOCAL_PLY_PREVIEW_BYTES = 150 * 1024 * 1024;
@@ -37,9 +38,13 @@ const closeUploadPanel = document.querySelector("#close-upload-panel");
 const toast = document.querySelector("#toast");
 const dropZone = document.querySelector("#drop-zone");
 const modelInfo = document.querySelector("#model-info");
+const accountStatus = document.querySelector("#account-status");
+const accountHint = document.querySelector("#account-hint");
+const accountAction = document.querySelector("#account-action");
 
 let viewer;
 let models = [];
+let currentSession = { authenticated: false, user: null, mode: "static" };
 let activeModel = null;
 let activeModels = [];
 let activeObjectUrl = null;
@@ -156,8 +161,37 @@ function getTotalModelSize(selectedModels) {
 
 function showToast(message) {
   toast.textContent = message;
-  toast.classList.add("is-visible");
-  window.setTimeout(() => toast.classList.remove("is-visible"), 2400);
+  toast.classList.add("show");
+  window.setTimeout(() => toast.classList.remove("show"), 2400);
+}
+
+function updateAccountUI(session = currentSession) {
+  if (!accountStatus || !accountHint || !accountAction) return;
+
+  if (!isBackendEnabled()) {
+    accountStatus.textContent = "Static viewer mode";
+    accountHint.textContent = "Backend not connected yet. Public demo/hosted models are shown.";
+    accountAction.hidden = true;
+    return;
+  }
+
+  if (session.authenticated) {
+    const email = session.user?.email || session.user?.name || "Signed in user";
+    accountStatus.textContent = email;
+    accountHint.textContent = "Only models assigned to this account will appear below.";
+    const logoutUrl = getLogoutUrl();
+    accountAction.hidden = !logoutUrl;
+    accountAction.href = logoutUrl || "#";
+    accountAction.textContent = "Sign out";
+    return;
+  }
+
+  accountStatus.textContent = "Not signed in";
+  accountHint.textContent = "Sign in to view your private OneDrive model workspace. Demo model is shown without login.";
+  const loginUrl = getLoginUrl();
+  accountAction.hidden = !loginUrl;
+  accountAction.href = loginUrl || "#";
+  accountAction.textContent = "Sign in";
 }
 
 function showUploadPanel() {
@@ -345,6 +379,7 @@ function normalizeManifest(rawManifest) {
       if (typeof model === "string") {
         const name = model.split("/").pop() || `Model ${index + 1}`;
         return {
+          id: slugify(name),
           name,
           slug: slugify(name),
           path: model
@@ -358,12 +393,16 @@ function normalizeManifest(rawManifest) {
       const progressiveDefault = extension === ".splat" || extension === ".ksplat";
 
       return {
+        id: model.id || model.modelId || model.slug || slugify(name || path),
         name,
         slug: model.slug || slugify(name || path),
         path,
         filename,
         size: model.size,
         format: model.format,
+        ownerId: model.ownerId,
+        ownerEmail: model.ownerEmail,
+        isDemo: Boolean(model.isDemo || model.demo),
         position: model.position,
         rotation: model.rotation,
         scale: model.scale,
@@ -439,8 +478,17 @@ function selectModelIndexes(indexes) {
 }
 
 async function loadManifest() {
+  const userModelsPayload = await getUserModels().catch((error) => {
+    console.warn("User model API unavailable; falling back to static manifest.", error);
+    return null;
+  });
+
+  if (userModelsPayload?.models) {
+    return normalizeManifest(userModelsPayload.models);
+  }
+
   try {
-    const response = await fetch(MANIFEST_URL, { cache: "no-store" });
+    const response = await fetch(APP_CONFIG.staticManifestUrl, { cache: "no-store" });
     if (!response.ok) return [];
     return normalizeManifest(await response.json());
   } catch {
@@ -688,11 +736,20 @@ async function loadLocalFile(file) {
 }
 
 async function shareDashboard() {
-  const shareUrl = getShareUrl();
+  let shareUrl = getShareUrl();
   if (!shareUrl) {
     showToast("Submit this model for approval before sharing.");
     showUploadPanel();
     return;
+  }
+
+  if (isBackendEnabled() && activeModels.length) {
+    const modelIds = activeModels.map((model) => model.id || model.slug).filter(Boolean);
+    const privateShareUrl = await createModelShare(modelIds).catch((error) => {
+      console.warn("Could not create backend share link.", error);
+      return null;
+    });
+    if (privateShareUrl) shareUrl = privateShareUrl;
   }
 
   const shareData = {
@@ -790,6 +847,11 @@ applyTheme(window.localStorage.getItem("gaussian-viewer-theme") || "light");
 
 async function startDashboard() {
   showLoading("Preparing viewer", "Looking for self-hosted models...");
+  currentSession = await getSession().catch((error) => {
+    console.warn("Session API unavailable; using static viewer mode.", error);
+    return { authenticated: false, user: null, mode: "static" };
+  });
+  updateAccountUI(currentSession);
   models = await loadManifest();
   fillModelSelect();
 

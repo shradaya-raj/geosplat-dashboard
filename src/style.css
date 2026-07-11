@@ -220,6 +220,11 @@ html[data-state="error"] .live-dot {
   background: var(--button-soft);
 }
 
+.button-full {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .button:hover,
 .icon-button:hover {
   transform: translateY(-1px);
@@ -371,6 +376,26 @@ html[data-state="error"] .live-dot {
   background: var(--button-soft);
   color: var(--muted);
   font-size: 12px;
+}
+
+.account-status {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--button-soft);
+}
+
+.account-status span {
+  color: var(--ink);
+  font-weight: 850;
+}
+
+.account-status small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .model-info strong {
