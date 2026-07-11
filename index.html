@@ -38,6 +38,21 @@
         <section class="viewer-card" aria-label="Interactive Gaussian splat viewer">
           <div id="viewer" class="viewer"></div>
 
+          <aside class="portal-panel" aria-label="Gaussian viewer workflow">
+            <span class="eyebrow">Gaussian model portal</span>
+            <h1>Load, review, and share captured blocks.</h1>
+            <p>
+              Select one or more hosted splat blocks, stream them into the viewer,
+              and share the exact scene with a single link.
+            </p>
+            <div class="workflow-cards" aria-label="Publishing workflow">
+              <span>Upload</span>
+              <span>Process</span>
+              <span>Host</span>
+              <span>Share</span>
+            </div>
+          </aside>
+
           <div id="loading-panel" class="loading-panel">
             <span class="loader"></span>
             <strong id="loading-title">Preparing viewer</strong>
@@ -115,6 +130,12 @@
                 the file to the approval folder. After review, the owner will
                 publish approved models to the hosted viewer.
               </p>
+              <p class="notice-text">
+                Owner notification target:
+                <a href="mailto:shradayastocks0@gmail.com">shradayastocks0@gmail.com</a>.
+                Configure a OneDrive/SharePoint alert or Power Automate flow so every
+                new upload sends an email to this address.
+              </p>
               <div class="upload-actions">
                 <a
                   class="button button-primary"
@@ -123,6 +144,12 @@
                   rel="noreferrer"
                 >
                   Submit to OneDrive
+                </a>
+                <a
+                  class="button button-secondary"
+                  href="mailto:shradayastocks0@gmail.com?subject=New Gaussian model uploaded&body=A new Gaussian model has been uploaded to the OneDrive submission folder. Please review and publish it."
+                >
+                  Email owner
                 </a>
                 <a
                   class="button button-secondary"
@@ -136,7 +163,8 @@
               <ol class="upload-steps">
                 <li>Open the OneDrive submission folder.</li>
                 <li>Upload your <code>.ply</code>, <code>.splat</code>, <code>.ksplat</code>, or <code>.spz</code> file.</li>
-                <li>Wait for the owner to review and approve the model.</li>
+                <li>The owner receives an email notification after the upload automation is enabled.</li>
+                <li>Wait for the owner to review, process, and approve the model.</li>
                 <li>The owner publishes approved files to the hosted viewer.</li>
                 <li>Refresh this dashboard, select the hosted model, then click Share.</li>
               </ol>
