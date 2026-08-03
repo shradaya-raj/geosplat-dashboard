@@ -5,8 +5,8 @@ itself:
 
 - Microsoft sign-in
 - one workspace per user
-- owner OneDrive folder creation
-- resumable OneDrive upload sessions
+- Cloudflare R2 large-file storage
+- short-lived signed upload/download URLs
 - per-user model lists
 - demo fallback models
 - private share-token links
@@ -37,7 +37,124 @@ npm install
 npm run dev
 ```
 
+## Recommended production setup: Supabase + Cloudflare R2
+
+Use this path for large Gaussian models.
+
+```text
+Supabase = users, profiles, model metadata, share links
+Cloudflare R2 = .ply, .splat, .ksplat, .spz model files
+```
+
+### 1. Create Cloudflare R2 bucket
+
+1. Open the Cloudflare dashboard.
+2. Go to `Storage & databases -> R2`.
+3. Create a bucket:
+
+   ```text
+   gaussian-models
+   ```
+
+4. Go to `R2 -> Overview -> Manage API Tokens`.
+5. Create an R2 token with:
+
+   ```text
+   Permission: Object Read & Write
+   Bucket scope: gaussian-models only
+   ```
+
+6. Copy:
+
+   ```text
+   CLOUDFLARE_ACCOUNT_ID
+   R2_ACCESS_KEY_ID
+   R2_SECRET_ACCESS_KEY
+   R2_BUCKET=gaussian-models
+   ```
+
+Cloudflare R2 uses an S3-compatible API. For browser uploads/downloads, this
+backend generates presigned URLs so secrets never reach the browser.
+
+### 2. Create Supabase project
+
+1. Create a Supabase project.
+2. Open `Project Settings -> API`.
+3. Copy:
+
+   ```text
+   SUPABASE_URL
+   SUPABASE_ANON_KEY
+   SUPABASE_SERVICE_ROLE_KEY
+   ```
+
+4. Open `SQL Editor`.
+5. Run:
+
+   ```text
+   backend/supabase-schema.sql
+   ```
+
+The schema creates:
+
+```text
+profiles
+models
+share_links
+```
+
+with row-level security prepared for per-user model access.
+
+### 3. Configure backend `.env`
+
+```text
+STORAGE_PROVIDER=r2
+
+SUPABASE_URL=...
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+
+CLOUDFLARE_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET=gaussian-models
+R2_SIGNED_URL_EXPIRES_SECONDS=3600
+```
+
+Then test R2:
+
+```bash
+npm run diagnose:r2
+```
+
+Expected:
+
+```text
+Cloudflare R2 credentials work.
+Generated a temporary upload URL successfully.
+```
+
+### R2 object layout
+
+```text
+gaussian-models/
+  demo/
+    processed/
+
+  users/
+    {userId}/
+      original/
+      processed/
+```
+
+Files should be private. The backend returns temporary signed URLs only when the
+user has permission.
+
 ## Initialize OneDrive as the database
+
+This path is now considered legacy for this project because Microsoft tenant
+admin consent was unavailable. Keep it only if OneDrive approval becomes
+possible later.
 
 After `.env` has the Microsoft app values and `GRAPH_DRIVE_ID`, run:
 

@@ -11,6 +11,14 @@ import {
   mapDriveItemToModel
 } from "./graph.js";
 import {
+  buildModelKey,
+  createPresignedDownload,
+  createPresignedUpload,
+  getExtension,
+  getObjectInfo,
+  isR2Configured
+} from "./r2.js";
+import {
   createShare,
   getModelsByIds,
   getShare,
@@ -29,8 +37,7 @@ function frontendUrl(search = "") {
 }
 
 function extensionOf(filename = "") {
-  const lower = filename.split("?")[0].split("#")[0].toLowerCase();
-  return [...supportedExtensions].find((extension) => lower.endsWith(extension));
+  return getExtension(filename) || [...supportedExtensions].find((extension) => filename.toLowerCase().endsWith(extension));
 }
 
 function publicModel(model) {
@@ -55,7 +62,7 @@ function publicModel(model) {
 
 async function getPublishedModelsForUser(user) {
   const stored = await listModelsForUser(user.id);
-  const published = stored.filter((model) => model.status === "published" && model.path);
+  const published = stored.filter((model) => model.status === "published" && (model.path || model.r2Key));
 
   if (config.graph.driveId) {
     try {
@@ -77,7 +84,7 @@ async function getPublishedModelsForUser(user) {
   }
 
   const refreshed = await listModelsForUser(user.id);
-  return refreshed.filter((model) => model.status === "published" && model.path);
+  return refreshed.filter((model) => model.status === "published" && (model.path || model.r2Key));
 }
 
 async function getModelsFromShare(token) {
@@ -100,10 +107,34 @@ async function getModelsFromShare(token) {
         console.warn("Could not refresh shared model download URL.", error.message);
       }
     }
+    if (model.r2Key && isR2Configured()) {
+      visible.push({
+        ...model,
+        path: await createPresignedDownload({ key: model.r2Key })
+      });
+      continue;
+    }
     visible.push(model);
   }
 
-  return visible.filter((model) => model.status === "published" && model.path);
+  return visible.filter((model) => model.status === "published" && (model.path || model.r2Key));
+}
+
+async function withSignedModelUrls(models) {
+  const signed = [];
+
+  for (const model of models) {
+    if (model.r2Key && isR2Configured()) {
+      signed.push({
+        ...model,
+        path: await createPresignedDownload({ key: model.r2Key })
+      });
+      continue;
+    }
+    signed.push(model);
+  }
+
+  return signed;
 }
 
 export function createRouter() {
@@ -134,7 +165,7 @@ export function createRouter() {
       }
 
       if (req.session?.user) {
-        const userModels = await getPublishedModelsForUser(req.session.user);
+        const userModels = await withSignedModelUrls(await getPublishedModelsForUser(req.session.user));
         if (userModels.length) {
           return res.json({ models: userModels.map(publicModel), source: "user" });
         }
@@ -172,9 +203,46 @@ export function createRouter() {
     try {
       const filename = String(req.body?.filename || "");
       const size = Number(req.body?.size || 0);
+      const contentType = String(req.body?.contentType || "application/octet-stream");
       const extension = extensionOf(filename);
 
       if (!extension) return res.status(400).json({ error: "Unsupported Gaussian model file type." });
+
+      if (config.storage.provider === "r2" || isR2Configured()) {
+        if (!isR2Configured()) return res.status(501).json({ error: "Cloudflare R2 storage is not configured." });
+
+        const key = buildModelKey({
+          userId: req.session.user.id,
+          filename,
+          stage: "original"
+        });
+        const uploadUrl = await createPresignedUpload({ key, contentType });
+        const model = await upsertModel({
+          id: `r2_${nanoid(14)}`,
+          name: filename,
+          filename,
+          size,
+          ownerUserId: req.session.user.id,
+          ownerEmail: req.session.user.email,
+          r2Key: key,
+          status: "uploading",
+          source: "r2-original",
+          progressiveLoad: extension !== ".ply"
+        });
+
+        return res.json({
+          provider: "r2",
+          method: "PUT",
+          uploadUrl,
+          key,
+          modelId: model.id,
+          headers: {
+            "Content-Type": contentType
+          },
+          expiresIn: Math.min(config.r2.signedUrlExpiresSeconds, 3600)
+        });
+      }
+
       if (!config.graph.driveId) return res.status(501).json({ error: "OneDrive storage is not configured." });
 
       const session = await createUploadSession({
@@ -201,6 +269,32 @@ export function createRouter() {
 
   router.post("/api/uploads/complete", requireAuth, async (req, res, next) => {
     try {
+      if (req.body?.provider === "r2" || req.body?.r2Key) {
+        const modelId = String(req.body?.modelId || "");
+        const r2Key = String(req.body?.r2Key || req.body?.key || "");
+        if (!modelId || !r2Key) return res.status(400).json({ error: "Missing R2 upload details." });
+
+        const info = await getObjectInfo(r2Key);
+        const record = await upsertModel({
+          id: modelId,
+          name: req.body?.name || info.key.split("/").pop(),
+          filename: req.body?.filename || info.key.split("/").pop(),
+          size: info.size,
+          ownerUserId: req.session.user.id,
+          ownerEmail: req.session.user.email,
+          r2Key,
+          status: "pending",
+          source: "r2-original",
+          progressiveLoad: extensionOf(info.key) !== ".ply"
+        });
+
+        return res.json({
+          ok: true,
+          model: record,
+          message: `Upload received. ${config.ownerEmail} should review/process it before publishing.`
+        });
+      }
+
       const item = req.body?.driveItem;
       if (!item?.id || !item?.name) return res.status(400).json({ error: "Missing uploaded drive item." });
       if (!extensionOf(item.name)) return res.status(400).json({ error: "Unsupported Gaussian model file type." });

@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "diagnose:graph-token": "node src/diagnose-graph-token.js",
+    "diagnose:r2": "node src/diagnose-r2.js",
+    "discover:drive": "node src/discover-drive.js",
     "dev": "node --watch src/server.js",
     "init:onedrive-db": "node src/init-onedrive-database.js",
     "start": "node src/server.js"
@@ -12,7 +15,10 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1101.0",
+    "@aws-sdk/s3-request-presigner": "^3.1101.0",
     "@azure/msal-node": "^5.4.0",
+    "@supabase/supabase-js": "^2.112.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

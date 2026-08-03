@@ -120,8 +120,23 @@ for testing without committing it.
 
 The dashboard is prepared for a backend API. Without the backend, it runs in
 static GitHub Pages mode. With the backend connected, each signed-in user can
-see only their own published OneDrive models, while new users can receive a demo
-model fallback.
+see only their own published cloud-hosted models, while new users can receive a
+demo model fallback.
+
+Recommended storage for large models is now:
+
+```text
+Supabase = auth, database, profiles, model ownership, share links
+Cloudflare R2 = large Gaussian splat files
+```
+
+This avoids Microsoft admin-consent issues and keeps large model storage cheap.
+See:
+
+```text
+backend/README.md
+backend/supabase-schema.sql
+```
 
 Frontend environment:
 
