@@ -15,18 +15,8 @@ export const config = {
   sessionSecret: required("SESSION_SECRET", "dev-only-change-me"),
   ownerEmail: required("OWNER_EMAIL", "shradaya.poudel@gallimaps.com"),
   demoModelUrl: process.env.DEMO_MODEL_URL || "",
-  microsoft: {
-    clientId: required("MS_CLIENT_ID", "missing-client-id"),
-    clientSecret: required("MS_CLIENT_SECRET", "missing-client-secret"),
-    tenantId: required("MS_TENANT_ID", "common"),
-    redirectPath: process.env.MS_REDIRECT_PATH || "/api/auth/callback"
-  },
-  graph: {
-    driveId: process.env.GRAPH_DRIVE_ID || "",
-    rootFolder: process.env.GRAPH_ROOT_FOLDER || "GaussianViewer"
-  },
   storage: {
-    provider: process.env.STORAGE_PROVIDER || "local"
+    provider: process.env.STORAGE_PROVIDER || "r2"
   },
   supabase: {
     url: process.env.SUPABASE_URL || "",
@@ -42,10 +32,6 @@ export const config = {
     signedUrlExpiresSeconds: Number(process.env.R2_SIGNED_URL_EXPIRES_SECONDS || 3600)
   }
 };
-
-export function getRedirectUri() {
-  return `${config.backendBaseUrl}${config.microsoft.redirectPath}`;
-}
 
 export function isProduction() {
   return config.nodeEnv === "production";

@@ -88,17 +88,11 @@ link.
 
 ## Submit from any computer without command prompt
 
-Open the live dashboard and click **Submit model**. It opens the OneDrive /
-SharePoint submission folder:
+The current public dashboard supports local preview and email-based submission.
+The production upload flow will use the backend to create short-lived Cloudflare
+R2 upload URLs, then store metadata in Supabase.
 
-```text
-https://galliexpress-my.sharepoint.com/:f:/g/personal/shradaya_poudel_gallimaps_com/IgCP-tpfhfvhRqIu3Sv31GiFAYeVoDi3P197ExUsbbHXu_k
-```
-
-Submitted files are review-only. After approval, the owner publishes the model
-to the GitHub Release named `models` and runs the GitHub Pages deployment
-workflow. This keeps GitHub access private while allowing people to submit files
-from any device.
+Submitted files are review-only until the owner processes and publishes them.
 
 ## Local testing
 
@@ -130,7 +124,7 @@ Supabase = auth, database, profiles, model ownership, share links
 Cloudflare R2 = large Gaussian splat files
 ```
 
-This avoids Microsoft admin-consent issues and keeps large model storage cheap.
+This keeps large model storage cheap and avoids tenant-specific storage approvals.
 See:
 
 ```text

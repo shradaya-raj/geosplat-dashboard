@@ -1,18 +1,18 @@
 # Gaussian Viewer Backend
 
-This backend adds the private/product layer that GitHub Pages cannot provide by
-itself:
+Backend API for the Gaussian Viewer product layer.
 
-- Microsoft sign-in
-- one workspace per user
-- Cloudflare R2 large-file storage
-- short-lived signed upload/download URLs
-- per-user model lists
-- demo fallback models
-- private share-token links
+Current architecture:
 
-The frontend can still run without this backend. When `VITE_GV_API_BASE_URL` is
-empty, the dashboard falls back to the static GitHub Pages manifest.
+```text
+Frontend dashboard
+  -> Backend API
+  -> Supabase Auth + Postgres metadata
+  -> Cloudflare R2 private model files
+```
+
+Cloudflare R2 stores the large `.ply`, `.splat`, `.ksplat`, and `.spz` files.
+Supabase stores users, profiles, model ownership, and share links.
 
 ## Local setup
 
@@ -23,60 +23,71 @@ copy .env.example .env
 npm run dev
 ```
 
-Then set the frontend `.env.local`:
+## Environment
+
+Fill `backend/.env`:
 
 ```text
-VITE_GV_API_BASE_URL=http://localhost:8787
-VITE_GV_OWNER_EMAIL=shradaya.poudel@gallimaps.com
+PORT=8787
+NODE_ENV=development
+FRONTEND_ORIGIN=http://localhost:5173
+FRONTEND_APP_PATH=/
+BACKEND_BASE_URL=http://localhost:8787
+SESSION_SECRET=replace-with-a-long-random-secret
+
+STORAGE_PROVIDER=r2
+
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+CLOUDFLARE_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=gaussian-models
+R2_PUBLIC_BASE_URL=
+R2_SIGNED_URL_EXPIRES_SECONDS=3600
+
+OWNER_EMAIL=shradaya.poudel@gallimaps.com
+DEMO_MODEL_URL=
 ```
 
-Run the frontend separately:
+Never commit `.env`.
 
-```bash
-npm install
-npm run dev
-```
+## Cloudflare R2 setup
 
-## Recommended production setup: Supabase + Cloudflare R2
-
-Use this path for large Gaussian models.
-
-```text
-Supabase = users, profiles, model metadata, share links
-Cloudflare R2 = .ply, .splat, .ksplat, .spz model files
-```
-
-### 1. Create Cloudflare R2 bucket
-
-1. Open the Cloudflare dashboard.
+1. Open Cloudflare dashboard.
 2. Go to `Storage & databases -> R2`.
-3. Create a bucket:
+3. Create bucket:
 
    ```text
    gaussian-models
    ```
 
 4. Go to `R2 -> Overview -> Manage API Tokens`.
-5. Create an R2 token with:
+5. Create an R2 token:
 
    ```text
    Permission: Object Read & Write
-   Bucket scope: gaussian-models only
+   Scope: gaussian-models bucket only
    ```
 
-6. Copy:
+6. Copy the account ID, access key ID, and secret access key into `.env`.
 
-   ```text
-   CLOUDFLARE_ACCOUNT_ID
-   R2_ACCESS_KEY_ID
-   R2_SECRET_ACCESS_KEY
-   R2_BUCKET=gaussian-models
-   ```
+Test:
 
-Cloudflare R2 uses an S3-compatible API. For browser uploads/downloads, this
-backend generates presigned URLs so secrets never reach the browser.
+```bash
+npm run diagnose:r2
+```
 
-### 2. Create Supabase project
+Expected:
+
+```text
+Cloudflare R2 credentials work.
+Generated a temporary upload URL successfully.
+```
+
+## Supabase setup
 
 1. Create a Supabase project.
 2. Open `Project Settings -> API`.
@@ -95,7 +106,7 @@ backend generates presigned URLs so secrets never reach the browser.
    backend/supabase-schema.sql
    ```
 
-The schema creates:
+This creates:
 
 ```text
 profiles
@@ -103,38 +114,28 @@ models
 share_links
 ```
 
-with row-level security prepared for per-user model access.
+with row-level security policies prepared for per-user access.
 
-### 3. Configure backend `.env`
+## API status
 
-```text
-STORAGE_PROVIDER=r2
+Implemented:
 
-SUPABASE_URL=...
-SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
+- `GET /health`
+- `GET /api/session`
+- `GET /api/models`
+- `POST /api/uploads/session`
+- `POST /api/uploads/complete`
+- `POST /api/shares`
+- `GET /api/auth/login` placeholder
+- `GET /api/auth/logout` placeholder
 
-CLOUDFLARE_ACCOUNT_ID=...
-R2_ACCESS_KEY_ID=...
-R2_SECRET_ACCESS_KEY=...
-R2_BUCKET=gaussian-models
-R2_SIGNED_URL_EXPIRES_SECONDS=3600
-```
+Next phase:
 
-Then test R2:
+- replace placeholder auth with Supabase Auth
+- store model/share records in Supabase instead of the temporary JSON store
+- add owner/admin approval workflow for `pending -> published`
 
-```bash
-npm run diagnose:r2
-```
-
-Expected:
-
-```text
-Cloudflare R2 credentials work.
-Generated a temporary upload URL successfully.
-```
-
-### R2 object layout
+## R2 object layout
 
 ```text
 gaussian-models/
@@ -147,200 +148,5 @@ gaussian-models/
       processed/
 ```
 
-Files should be private. The backend returns temporary signed URLs only when the
-user has permission.
-
-## Initialize OneDrive as the database
-
-This path is now considered legacy for this project because Microsoft tenant
-admin consent was unavailable. Keep it only if OneDrive approval becomes
-possible later.
-
-After `.env` has the Microsoft app values and `GRAPH_DRIVE_ID`, run:
-
-```bash
-cd backend
-npm run init:onedrive-db
-```
-
-This creates the storage/database structure inside OneDrive. The command is
-idempotent: existing JSON files are not overwritten.
-
-Created layout:
-
-```text
-GaussianViewer/
-  system/
-    database.json
-    settings.json
-    indexes/
-      users.json
-      models.json
-      shares.json
-    logs/
-
-  demo/
-    models.json
-    original/
-    processed/
-
-  users/
-    _template/
-      profile.json
-      models.json
-      uploads/
-        original/
-        processed/
-```
-
-When profile/login is added, each real user will get:
-
-```text
-GaussianViewer/users/{userId}/profile.json
-GaussianViewer/users/{userId}/models.json
-GaussianViewer/users/{userId}/uploads/original/
-GaussianViewer/users/{userId}/uploads/processed/
-```
-
-The backend will use OneDrive JSON files as the metadata database and OneDrive
-folders as the file store.
-
-## Microsoft setup
-
-Create an app registration in Microsoft Entra:
-
-1. Add a web redirect URI:
-
-   ```text
-   http://localhost:8787/api/auth/callback
-   ```
-
-   Later add your production API callback, for example:
-
-   ```text
-   https://api.yourdomain.com/api/auth/callback
-   ```
-
-2. Create a client secret.
-3. Add delegated permission:
-
-   - `User.Read`
-
-4. For owner OneDrive storage, add application permission:
-
-   - `Files.ReadWrite.All`
-
-   Admin consent is normally required for application permissions.
-
-5. Fill the backend `.env`.
-
-## Environment variables
-
-```text
-PORT=8787
-NODE_ENV=development
-FRONTEND_ORIGIN=http://localhost:5173
-FRONTEND_APP_PATH=/
-BACKEND_BASE_URL=http://localhost:8787
-SESSION_SECRET=replace-with-a-long-random-secret
-MS_CLIENT_ID=...
-MS_CLIENT_SECRET=...
-MS_TENANT_ID=...
-GRAPH_DRIVE_ID=...
-GRAPH_ROOT_FOLDER=GaussianViewer
-OWNER_EMAIL=shradaya.poudel@gallimaps.com
-DEMO_MODEL_URL=
-```
-
-For GitHub Pages as the frontend:
-
-```text
-FRONTEND_ORIGIN=https://shradaya-raj.github.io
-FRONTEND_APP_PATH=/geosplat-dashboard/
-```
-
-For your own domain:
-
-```text
-FRONTEND_ORIGIN=https://viewer.yourdomain.com
-FRONTEND_APP_PATH=/
-BACKEND_BASE_URL=https://api.yourdomain.com
-```
-
-## API
-
-### Auth
-
-- `GET /api/auth/login`
-- `GET /api/auth/callback`
-- `GET /api/auth/logout`
-- `GET /api/session`
-
-### Models
-
-- `GET /api/models`
-  - signed-in users receive only their own published models
-  - users with no published models receive demo models
-- `GET /api/models?share=<token>`
-  - public share-token view for selected models only
-
-### Uploads
-
-- `POST /api/uploads/session`
-
-Body:
-
-```json
-{
-  "filename": "site-block-01.splat",
-  "size": 123456789
-}
-```
-
-Returns a Microsoft Graph `uploadUrl`. The browser uploads chunks directly to
-that URL, so large files do not pass through this backend.
-
-- `POST /api/uploads/complete`
-
-Body:
-
-```json
-{
-  "driveItem": {
-    "id": "...",
-    "name": "site-block-01.splat",
-    "size": 123456789
-  }
-}
-```
-
-The uploaded model is recorded as `pending`. It should be reviewed/processed
-before being marked as `published`.
-
-### Shares
-
-- `POST /api/shares`
-
-Body:
-
-```json
-{
-  "modelIds": ["model-id"]
-}
-```
-
-Only the owner can create a share link for their own published models.
-
-## OneDrive folder layout
-
-```text
-GaussianViewer/
-  users/
-    user_xxxxxx/
-      uploads/
-        original/
-        processed/
-```
-
-Only files in `uploads/processed` are automatically scanned as published/viewable
-models for that user.
+R2 objects should remain private. The backend returns short-lived signed URLs
+only when the user has permission.

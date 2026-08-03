@@ -59,7 +59,7 @@
             <div class="account-status">
               <span id="account-status">Static viewer mode</span>
               <small id="account-hint">
-                Connect the backend later to show only each user's own OneDrive models.
+                Connect Supabase Auth and R2 storage to show only each user's own models.
               </small>
             </div>
             <a id="account-action" class="button button-secondary button-full" href="#" hidden>
@@ -122,9 +122,9 @@
               <span>Share</span>
             </div>
             <p class="panel-note">
-              New submissions should notify the OneDrive owner at
+              New submissions should notify the model owner at
               <a href="mailto:shradaya.poudel@gallimaps.com">shradaya.poudel@gallimaps.com</a>
-              through OneDrive/Outlook notifications or Power Automate.
+              until the Supabase + R2 upload flow is connected.
             </p>
           </section>
         </aside>
@@ -173,27 +173,25 @@
               <strong>Submit a model for approval.</strong>
               <p>
                 Local files are preview-only. To make a model shareable, submit
-                the file to the approval folder. After review, the owner will
-                publish approved models to the hosted viewer.
+                the file for approval. After review, the owner will publish
+                approved models to the hosted viewer.
               </p>
               <p class="notice-text">
                 Owner notification target:
                 <a href="mailto:shradaya.poudel@gallimaps.com">shradaya.poudel@gallimaps.com</a>.
-                Configure the OneDrive-linked Outlook account or Power Automate flow so
-                every new upload sends an email to this address.
+                The production upload flow will store files in Cloudflare R2 and
+                metadata in Supabase.
               </p>
               <div class="upload-actions">
                 <a
                   class="button button-primary"
-                  href="https://galliexpress-my.sharepoint.com/:f:/g/personal/shradaya_poudel_gallimaps_com/IgCP-tpfhfvhRqIu3Sv31GiFAYeVoDi3P197ExUsbbHXu_k"
-                  target="_blank"
-                  rel="noreferrer"
+                  href="mailto:shradaya.poudel@gallimaps.com?subject=Gaussian model submission&body=I would like to submit a Gaussian model for approval."
                 >
-                  Submit to OneDrive
+                  Email submission
                 </a>
                 <a
                   class="button button-secondary"
-                  href="mailto:shradaya.poudel@gallimaps.com?subject=New Gaussian model uploaded&body=A new Gaussian model has been uploaded to the OneDrive submission folder. Please review and publish it."
+                  href="mailto:shradaya.poudel@gallimaps.com?subject=New Gaussian model submitted&body=A new Gaussian model has been submitted for review. Please process and publish it when ready."
                 >
                   Email owner
                 </a>
@@ -207,11 +205,10 @@
                 </a>
               </div>
               <ol class="upload-steps">
-                <li>Open the OneDrive submission folder.</li>
-                <li>Upload your <code>.ply</code>, <code>.splat</code>, <code>.ksplat</code>, or <code>.spz</code> file.</li>
-                <li>The owner receives an email notification after the upload automation is enabled.</li>
+                <li>Send the model file or request an upload slot.</li>
+                <li>Supported formats are <code>.ply</code>, <code>.splat</code>, <code>.ksplat</code>, and <code>.spz</code>.</li>
                 <li>Wait for the owner to review, process, and approve the model.</li>
-                <li>The owner publishes approved files to the hosted viewer.</li>
+                <li>The owner publishes approved files to R2-backed hosted storage.</li>
                 <li>Refresh this dashboard, select the hosted model, then click Share.</li>
               </ol>
             </div>

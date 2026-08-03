@@ -1,15 +1,7 @@
 import { Router } from "express";
 import { nanoid } from "nanoid";
 import { config } from "./config.js";
-import { finishLogin, logout, requireAuth, startLogin } from "./auth.js";
-import {
-  createUploadSession,
-  getDriveItem,
-  getUserOriginalFolderPath,
-  getUserProcessedFolderPath,
-  listFolderChildren,
-  mapDriveItemToModel
-} from "./graph.js";
+import { authPending, getSessionPayload, requireAuth } from "./auth.js";
 import {
   buildModelKey,
   createPresignedDownload,
@@ -27,8 +19,6 @@ import {
   upsertModel
 } from "./store.js";
 
-const supportedExtensions = new Set([".ply", ".splat", ".ksplat", ".spz"]);
-
 function frontendUrl(search = "") {
   const path = config.frontendAppPath.startsWith("/")
     ? config.frontendAppPath
@@ -37,7 +27,7 @@ function frontendUrl(search = "") {
 }
 
 function extensionOf(filename = "") {
-  return getExtension(filename) || [...supportedExtensions].find((extension) => filename.toLowerCase().endsWith(extension));
+  return getExtension(filename);
 }
 
 function publicModel(model) {
@@ -62,29 +52,7 @@ function publicModel(model) {
 
 async function getPublishedModelsForUser(user) {
   const stored = await listModelsForUser(user.id);
-  const published = stored.filter((model) => model.status === "published" && (model.path || model.r2Key));
-
-  if (config.graph.driveId) {
-    try {
-      const children = await listFolderChildren(getUserProcessedFolderPath(user));
-      for (const item of children) {
-        if (!item.file || !extensionOf(item.name)) continue;
-        const mapped = mapDriveItemToModel(item, user.id);
-        await upsertModel({
-          ...mapped,
-          id: `drive_${item.id}`,
-          ownerEmail: user.email,
-          status: "published",
-          progressiveLoad: extensionOf(item.name) !== ".ply"
-        });
-      }
-    } catch (error) {
-      console.warn("Could not scan processed OneDrive folder.", error.message);
-    }
-  }
-
-  const refreshed = await listModelsForUser(user.id);
-  return refreshed.filter((model) => model.status === "published" && (model.path || model.r2Key));
+  return stored.filter((model) => model.status === "published" && (model.path || model.r2Key));
 }
 
 async function getModelsFromShare(token) {
@@ -94,19 +62,6 @@ async function getModelsFromShare(token) {
   const visible = [];
 
   for (const model of models) {
-    if (model.driveItemId && config.graph.driveId) {
-      try {
-        const item = await getDriveItem(model.driveItemId);
-        visible.push({
-          ...model,
-          path: item["@microsoft.graph.downloadUrl"] || model.path,
-          size: item.size || model.size
-        });
-        continue;
-      } catch (error) {
-        console.warn("Could not refresh shared model download URL.", error.message);
-      }
-    }
     if (model.r2Key && isR2Configured()) {
       visible.push({
         ...model,
@@ -144,16 +99,11 @@ export function createRouter() {
     res.json({ ok: true, service: "gaussian-viewer-backend" });
   });
 
-  router.get("/api/auth/login", startLogin);
-  router.get(config.microsoft.redirectPath, finishLogin);
-  router.get("/api/auth/logout", logout);
+  router.get("/api/auth/login", authPending);
+  router.get("/api/auth/logout", authPending);
 
   router.get("/api/session", (req, res) => {
-    res.json({
-      authenticated: Boolean(req.session?.user),
-      user: req.session?.user || null,
-      mode: config.graph.driveId ? "onedrive-owner-storage" : "metadata-only"
-    });
+    res.json(getSessionPayload(req));
   });
 
   router.get("/api/models", async (req, res, next) => {
@@ -208,60 +158,40 @@ export function createRouter() {
 
       if (!extension) return res.status(400).json({ error: "Unsupported Gaussian model file type." });
 
-      if (config.storage.provider === "r2" || isR2Configured()) {
-        if (!isR2Configured()) return res.status(501).json({ error: "Cloudflare R2 storage is not configured." });
-
-        const key = buildModelKey({
-          userId: req.session.user.id,
-          filename,
-          stage: "original"
-        });
-        const uploadUrl = await createPresignedUpload({ key, contentType });
-        const model = await upsertModel({
-          id: `r2_${nanoid(14)}`,
-          name: filename,
-          filename,
-          size,
-          ownerUserId: req.session.user.id,
-          ownerEmail: req.session.user.email,
-          r2Key: key,
-          status: "uploading",
-          source: "r2-original",
-          progressiveLoad: extension !== ".ply"
-        });
-
-        return res.json({
-          provider: "r2",
-          method: "PUT",
-          uploadUrl,
-          key,
-          modelId: model.id,
-          headers: {
-            "Content-Type": contentType
-          },
-          expiresIn: Math.min(config.r2.signedUrlExpiresSeconds, 3600)
-        });
+      if (!isR2Configured()) {
+        return res.status(501).json({ error: "Cloudflare R2 storage is not configured." });
       }
 
-      if (!config.graph.driveId) return res.status(501).json({ error: "OneDrive storage is not configured." });
-
-      const session = await createUploadSession({
-        folderPath: getUserOriginalFolderPath(req.session.user),
-        filename
+      const key = buildModelKey({
+        userId: req.session.user.id,
+        filename,
+        stage: "original"
       });
-
-      await upsertModel({
-        id: `upload_${nanoid(14)}`,
+      const uploadUrl = await createPresignedUpload({ key, contentType });
+      const model = await upsertModel({
+        id: `r2_${nanoid(14)}`,
         name: filename,
         filename,
         size,
         ownerUserId: req.session.user.id,
         ownerEmail: req.session.user.email,
+        r2Key: key,
         status: "uploading",
-        source: "onedrive-original"
+        source: "r2-original",
+        progressiveLoad: extension !== ".ply"
       });
 
-      res.json(session);
+      return res.json({
+        provider: "r2",
+        method: "PUT",
+        uploadUrl,
+        key,
+        modelId: model.id,
+        headers: {
+          "Content-Type": contentType
+        },
+        expiresIn: Math.min(config.r2.signedUrlExpiresSeconds, 3600)
+      });
     } catch (error) {
       next(error);
     }
@@ -269,50 +199,25 @@ export function createRouter() {
 
   router.post("/api/uploads/complete", requireAuth, async (req, res, next) => {
     try {
-      if (req.body?.provider === "r2" || req.body?.r2Key) {
-        const modelId = String(req.body?.modelId || "");
-        const r2Key = String(req.body?.r2Key || req.body?.key || "");
-        if (!modelId || !r2Key) return res.status(400).json({ error: "Missing R2 upload details." });
+      const modelId = String(req.body?.modelId || "");
+      const r2Key = String(req.body?.r2Key || req.body?.key || "");
+      if (!modelId || !r2Key) return res.status(400).json({ error: "Missing R2 upload details." });
 
-        const info = await getObjectInfo(r2Key);
-        const record = await upsertModel({
-          id: modelId,
-          name: req.body?.name || info.key.split("/").pop(),
-          filename: req.body?.filename || info.key.split("/").pop(),
-          size: info.size,
-          ownerUserId: req.session.user.id,
-          ownerEmail: req.session.user.email,
-          r2Key,
-          status: "pending",
-          source: "r2-original",
-          progressiveLoad: extensionOf(info.key) !== ".ply"
-        });
-
-        return res.json({
-          ok: true,
-          model: record,
-          message: `Upload received. ${config.ownerEmail} should review/process it before publishing.`
-        });
-      }
-
-      const item = req.body?.driveItem;
-      if (!item?.id || !item?.name) return res.status(400).json({ error: "Missing uploaded drive item." });
-      if (!extensionOf(item.name)) return res.status(400).json({ error: "Unsupported Gaussian model file type." });
-
+      const info = await getObjectInfo(r2Key);
       const record = await upsertModel({
-        id: `drive_${item.id}`,
-        name: item.name,
-        filename: item.name,
-        size: item.size,
+        id: modelId,
+        name: req.body?.name || info.key.split("/").pop(),
+        filename: req.body?.filename || info.key.split("/").pop(),
+        size: info.size,
         ownerUserId: req.session.user.id,
         ownerEmail: req.session.user.email,
-        driveItemId: item.id,
+        r2Key,
         status: "pending",
-        source: "onedrive-original",
-        progressiveLoad: extensionOf(item.name) !== ".ply"
+        source: "r2-original",
+        progressiveLoad: extensionOf(info.key) !== ".ply"
       });
 
-      res.json({
+      return res.json({
         ok: true,
         model: record,
         message: `Upload received. ${config.ownerEmail} should review/process it before publishing.`

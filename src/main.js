@@ -191,7 +191,7 @@ function updateAccountUI(session = currentSession) {
   }
 
   accountStatus.textContent = "Not signed in";
-  accountHint.textContent = "Sign in to view your private OneDrive model workspace. Demo model is shown without login.";
+  accountHint.textContent = "Sign in to view your private model workspace. Demo model is shown without login.";
   const loginUrl = getLoginUrl();
   accountAction.hidden = !loginUrl;
   accountAction.href = loginUrl || "#";
