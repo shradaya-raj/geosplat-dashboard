@@ -37,6 +37,57 @@ npm install
 npm run dev
 ```
 
+## Initialize OneDrive as the database
+
+After `.env` has the Microsoft app values and `GRAPH_DRIVE_ID`, run:
+
+```bash
+cd backend
+npm run init:onedrive-db
+```
+
+This creates the storage/database structure inside OneDrive. The command is
+idempotent: existing JSON files are not overwritten.
+
+Created layout:
+
+```text
+GaussianViewer/
+  system/
+    database.json
+    settings.json
+    indexes/
+      users.json
+      models.json
+      shares.json
+    logs/
+
+  demo/
+    models.json
+    original/
+    processed/
+
+  users/
+    _template/
+      profile.json
+      models.json
+      uploads/
+        original/
+        processed/
+```
+
+When profile/login is added, each real user will get:
+
+```text
+GaussianViewer/users/{userId}/profile.json
+GaussianViewer/users/{userId}/models.json
+GaussianViewer/users/{userId}/uploads/original/
+GaussianViewer/users/{userId}/uploads/processed/
+```
+
+The backend will use OneDrive JSON files as the metadata database and OneDrive
+folders as the file store.
+
 ## Microsoft setup
 
 Create an app registration in Microsoft Entra:

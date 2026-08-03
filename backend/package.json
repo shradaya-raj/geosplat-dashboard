@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
+    "init:onedrive-db": "node src/init-onedrive-database.js",
     "start": "node src/server.js"
   },
   "engines": {

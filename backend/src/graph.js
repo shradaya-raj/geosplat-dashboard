@@ -7,7 +7,7 @@ function encodePathSegment(value) {
   return encodeURIComponent(value).replace(/%2F/gi, "/");
 }
 
-async function graphFetch(path, options = {}) {
+export async function graphFetch(path, options = {}) {
   const token = await getAppGraphToken();
   const response = await fetch(`${graphBase}${path}`, {
     ...options,
@@ -40,6 +40,10 @@ function itemByPath(path) {
   return `${driveRootPath()}/root:/${cleanPath}:`;
 }
 
+function contentByPath(path) {
+  return `${itemByPath(path)}/content`;
+}
+
 export function getUserOriginalFolderPath(user) {
   return `${config.graph.rootFolder}/users/${user.folderName}/uploads/original`;
 }
@@ -60,7 +64,7 @@ export async function ensureFolderPath(path) {
       await graphFetch(`${itemByPath(currentPath)}`);
     } catch {
       const childrenPath = parentPath
-        ? `${itemByPath(parentPath)}:/children`
+        ? `${itemByPath(parentPath)}/children`
         : `${driveRootPath()}/root/children`;
 
       await graphFetch(childrenPath, {
@@ -77,7 +81,7 @@ export async function ensureFolderPath(path) {
 
 export async function listFolderChildren(path) {
   await ensureFolderPath(path);
-  const data = await graphFetch(`${itemByPath(path)}:/children`);
+  const data = await graphFetch(`${itemByPath(path)}/children`);
   return data.value || [];
 }
 
@@ -85,12 +89,55 @@ export async function getDriveItem(itemId) {
   return graphFetch(`${driveRootPath()}/items/${itemId}`);
 }
 
+export async function getDriveItemByPath(path) {
+  return graphFetch(itemByPath(path));
+}
+
+export async function uploadTextFile(path, contents) {
+  const parent = path.split("/").slice(0, -1).join("/");
+  if (parent) await ensureFolderPath(parent);
+
+  return graphFetch(contentByPath(path), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8"
+    },
+    body: contents
+  });
+}
+
+export async function downloadTextFile(path) {
+  const token = await getAppGraphToken();
+  const response = await fetch(`${graphBase}${contentByPath(path)}`, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Graph content request failed ${response.status}: ${body}`);
+  }
+
+  return response.text();
+}
+
+export async function ensureJsonFile(path, fallbackValue) {
+  try {
+    await getDriveItemByPath(path);
+    return { path, created: false };
+  } catch {
+    await uploadTextFile(path, `${JSON.stringify(fallbackValue, null, 2)}\n`);
+    return { path, created: true };
+  }
+}
+
 export async function createUploadSession({ folderPath, filename }) {
   await ensureFolderPath(folderPath);
   const safeFilename = filename.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_");
   const uploadPath = `${folderPath}/${safeFilename}`;
 
-  const session = await graphFetch(`${itemByPath(uploadPath)}:/createUploadSession`, {
+  const session = await graphFetch(`${itemByPath(uploadPath)}/createUploadSession`, {
     method: "POST",
     body: JSON.stringify({
       item: {
