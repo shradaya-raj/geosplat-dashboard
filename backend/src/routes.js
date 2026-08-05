@@ -24,8 +24,8 @@ import {
   getModelsOwnedByUser,
   getRepositoryMode,
   listOwnedProjects,
+  listOwnedUserModels,
   listPublishedDemoModels,
-  listPublishedUserModels,
   markModelUploadComplete,
   recordModelAccess,
   resolveUploadProject,
@@ -73,6 +73,8 @@ function publicModel(model) {
     assetTypeLabel: model.assetTypeLabel,
     ownerUserId: model.ownerUserId,
     ownerEmail: model.ownerEmail,
+    status: model.status,
+    canLoad: Boolean(model.path && model.status === "published"),
     isDemo: Boolean(model.isDemo),
     progressiveLoad: model.progressiveLoad ?? true,
     alphaThreshold: model.alphaThreshold ?? 0,
@@ -135,7 +137,7 @@ async function getModelsFromShare(token, req) {
   const visible = [];
 
   for (const model of models) {
-    if (model.r2Key && isR2Configured()) {
+    if (model.status === "published" && model.r2Key && isR2Configured()) {
       visible.push({
         ...model,
         sharedViewOnly: true,
@@ -204,7 +206,7 @@ export function createRouter() {
       }
 
       if (req.user) {
-        const userModels = await withSignedModelUrls(await listPublishedUserModels(req.user.id));
+        const userModels = await withSignedModelUrls(await listOwnedUserModels(req.user.id));
         if (userModels.length) {
           return res.json({ models: userModels.map(publicModel), source: "user" });
         }

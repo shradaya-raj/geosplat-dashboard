@@ -614,6 +614,8 @@ function normalizeManifest(rawManifest) {
         projectSlug: model.projectSlug,
         assetType: model.assetType || "gaussian_splatting",
         assetTypeLabel: model.assetTypeLabel || ASSET_TYPE_LABELS[model.assetType] || "Gaussian Splatting",
+        status: model.status || "published",
+        canLoad: model.canLoad ?? Boolean(path),
         ownerId: model.ownerId,
         ownerEmail: model.ownerEmail,
         isDemo: Boolean(model.isDemo || model.demo),
@@ -625,7 +627,7 @@ function normalizeManifest(rawManifest) {
         progressiveLoad: model.progressiveLoad ?? progressiveDefault
       };
     })
-    .filter((model) => model.path);
+    .filter((model) => model.path || model.id);
 }
 
 function modelPathToUrl(path) {
@@ -687,7 +689,12 @@ function fillModelSelect() {
     const option = document.createElement("option");
     option.value = String(modelSelectEntries.length - 1);
     const fileLabel = entry.indexes.length === 1 ? "1 file" : `${entry.indexes.length} files`;
-    option.textContent = `${entry.label} (${fileLabel})`;
+    const statuses = [...new Set(entry.indexes.map((index) => models[index]?.status).filter(Boolean))];
+    const loadableCount = entry.indexes.filter((index) => models[index]?.canLoad).length;
+    const statusLabel = loadableCount
+      ? fileLabel
+      : statuses.length ? statuses.join(", ") : fileLabel;
+    option.textContent = `${entry.label} (${statusLabel})`;
     modelSelect.append(option);
   }
 
@@ -907,16 +914,19 @@ async function loadHostedModel(index) {
 async function loadSelectedHostedModels() {
   cleanObjectUrl();
   const indexes = getSelectedModelIndexes();
-  const selectedModels = indexes.map((index) => models[index]).filter(Boolean);
+  const loadableIndexes = indexes.filter((index) => models[index]?.canLoad && models[index]?.path);
+  const selectedModels = loadableIndexes
+    .map((index) => models[index])
+    .filter((model) => model?.canLoad && model.path);
 
   if (!selectedModels.length) {
     showReadyState();
-    showToast("Select a project first.");
+    showToast("Selected project has no approved Gaussian blocks yet. You can delete it or wait for approval.");
     return;
   }
 
   if (selectedModels.length === 1) {
-    await loadHostedModel(indexes[0]);
+    await loadHostedModel(loadableIndexes[0]);
     return;
   }
 

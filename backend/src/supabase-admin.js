@@ -31,6 +31,18 @@ export async function listPublishedModelsForUser(userId) {
   return data || [];
 }
 
+export async function listModelsForUserFromSupabase(userId) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("models")
+    .select("*")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
 export async function listDemoModelsFromSupabase() {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase

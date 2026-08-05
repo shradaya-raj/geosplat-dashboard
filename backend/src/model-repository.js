@@ -16,6 +16,7 @@ import {
   getSupabaseShare,
   isSupabaseConfigured,
   listModelsForProject,
+  listModelsForUserFromSupabase,
   listDemoModelsFromSupabase,
   listProjectsForUser,
   listPublishedModelsForUser,
@@ -120,6 +121,16 @@ export async function listPublishedUserModels(userId) {
 
   const models = await listModelsForUser(userId);
   return models.filter((model) => model.status === "published");
+}
+
+export async function listOwnedUserModels(userId) {
+  if (useSupabase()) {
+    const rows = await listModelsForUserFromSupabase(userId);
+    return rows.map(rowToModel).filter((model) => isRenderableGaussianAsset(model.assetType, model.format));
+  }
+
+  return (await listModelsForUser(userId))
+    .filter((model) => isRenderableGaussianAsset(model.assetType || DEFAULT_ASSET_TYPE, model.format));
 }
 
 export async function listPublishedDemoModels() {
