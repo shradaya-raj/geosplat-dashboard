@@ -655,6 +655,7 @@ function modelsChanged(nextModels) {
 
 async function refreshHostedModels({ silent = true } = {}) {
   if (!isBackendEnabled() || activeObjectUrl) return;
+  if (document.documentElement.dataset.state === "loading" || activeModels.length) return;
   const searchParams = new URLSearchParams(window.location.search);
   if (searchParams.has("share")) return;
 

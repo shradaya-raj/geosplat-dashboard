@@ -22,6 +22,25 @@ async function getSupabaseUserFromRequest(req) {
   };
 }
 
+export async function attachOptionalAuth(req, res, next) {
+  try {
+    if (req.session?.user) {
+      req.user = req.session.user;
+      return next();
+    }
+
+    const user = await getSupabaseUserFromRequest(req);
+    if (user) {
+      req.user = user;
+      req.session.user = user;
+    }
+
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function requireAuth(req, res, next) {
   try {
     if (req.session?.user) return next();

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { config } from "./config.js";
 import { sendApprovalEmail } from "./email.js";
-import { authPending, getSessionPayload, requireAuth } from "./auth.js";
+import { attachOptionalAuth, authPending, getSessionPayload, requireAuth } from "./auth.js";
 import {
   buildModelKey,
   createPresignedDownload,
@@ -139,11 +139,11 @@ export function createRouter() {
   router.get("/api/auth/login", authPending);
   router.get("/api/auth/logout", authPending);
 
-  router.get("/api/session", (req, res) => {
+  router.get("/api/session", attachOptionalAuth, (req, res) => {
     res.json(getSessionPayload(req));
   });
 
-  router.get("/api/models", async (req, res, next) => {
+  router.get("/api/models", attachOptionalAuth, async (req, res, next) => {
     try {
       const shareToken = typeof req.query.share === "string" ? req.query.share : "";
       if (shareToken) {
@@ -151,8 +151,8 @@ export function createRouter() {
         return res.json({ models: sharedModels.map(publicModel), source: "share", sharedViewOnly: true });
       }
 
-      if (req.session?.user) {
-        const userModels = await withSignedModelUrls(await listPublishedUserModels(req.session.user.id));
+      if (req.user) {
+        const userModels = await withSignedModelUrls(await listPublishedUserModels(req.user.id));
         if (userModels.length) {
           return res.json({ models: userModels.map(publicModel), source: "user" });
         }
