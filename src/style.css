@@ -105,7 +105,7 @@ a {
 }
 
 .topbar {
-  flex: 0 0 70px;
+  flex: 0 0 68px;
   padding: 12px clamp(16px, 3vw, 38px);
   border-bottom: 1px solid var(--line);
   display: flex;
@@ -203,6 +203,14 @@ html[data-state="error"] .live-dot {
   border-radius: 999px;
 }
 
+.icon-only {
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
 .button-primary {
   color: var(--accent-ink);
   border: 0;
@@ -245,7 +253,7 @@ html[data-state="error"] .live-dot {
   margin: 0 auto;
   padding: clamp(12px, 1.5vw, 22px);
   display: grid;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(292px, 340px) minmax(0, 1fr);
   gap: clamp(12px, 1.4vw, 18px);
 }
 
@@ -268,9 +276,9 @@ html[data-state="error"] .live-dot {
 }
 
 .panel-card {
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 24px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 22px;
   background: var(--panel);
   backdrop-filter: blur(18px);
   box-shadow: var(--shadow);
@@ -295,15 +303,14 @@ html[data-state="error"] .live-dot {
 .intro-card h1 {
   margin: 0;
   color: var(--ink);
-  font-size: clamp(28px, 3vw, 42px);
-  line-height: 0.96;
-  letter-spacing: -0.07em;
+  font-size: clamp(25px, 2.3vw, 34px);
+  line-height: 1;
+  letter-spacing: -0.055em;
 }
 
 .intro-card p,
 .panel-note,
-.empty-copy p,
-.notice-text {
+.empty-copy p {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
@@ -336,7 +343,7 @@ html[data-state="error"] .live-dot {
 
 .select-control select {
   width: 100%;
-  min-height: 138px;
+  min-height: 164px;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -417,24 +424,6 @@ html[data-state="error"] .live-dot {
 
 .model-info strong {
   color: var(--ink);
-}
-
-.workflow-cards {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.workflow-cards span {
-  padding: 10px 9px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 800;
-  text-align: center;
-  background: var(--button-soft);
 }
 
 .viewer-card {
@@ -577,7 +566,7 @@ html[data-state="error"] .live-dot {
 }
 
 .upload-panel {
-  width: min(620px, calc(100% - 32px));
+  width: min(640px, calc(100% - 32px));
   max-height: calc(100% - 40px);
   overflow: auto;
   padding: 26px;
@@ -601,6 +590,10 @@ html[data-state="error"] .live-dot {
   flex-wrap: wrap;
   gap: 10px;
   margin: 16px 0;
+}
+
+.upload-actions .button-primary {
+  flex: 1 1 180px;
 }
 
 .upload-form {
@@ -779,8 +772,7 @@ code {
     grid-template-columns: 1fr;
   }
 
-  .control-grid,
-  .workflow-cards {
+  .control-grid {
     grid-template-columns: 1fr;
   }
 

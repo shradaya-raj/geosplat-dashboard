@@ -19,7 +19,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span>
             <strong>Gaussian Viewer</strong>
-            <small>Hosted splat review portal</small>
+            <small>3D project workspace</small>
           </span>
         </a>
 
@@ -28,14 +28,14 @@
             <span class="live-dot"></span>
             <span id="connection-label">Initializing</span>
           </div>
-          <button id="theme-toggle" class="button button-secondary" type="button">
-            Dark theme
+          <button id="theme-toggle" class="button button-secondary icon-only" type="button" aria-label="Switch theme" title="Switch theme">
+            ☾
           </button>
           <button id="share-button" class="button button-primary" type="button">
             Share
           </button>
           <button id="upload-help-button" class="button button-secondary" type="button">
-            Submit model
+            Upload project
           </button>
         </div>
       </header>
@@ -43,11 +43,11 @@
       <main class="dashboard">
         <aside class="side-panel" aria-label="Model controls and details">
           <section class="panel-card intro-card">
-            <span class="eyebrow">Gaussian model portal</span>
-            <h1>Review captured blocks clearly.</h1>
+            <span class="eyebrow">Project viewer</span>
+            <h1>Load survey blocks as one clean scene.</h1>
             <p>
-              Load one model or combine multiple hosted blocks from the same area.
-              Keep the viewer clean while controls stay here.
+              Projects can contain Gaussian splats, mesh, point cloud, and
+              orthomosaic files. Gaussian blocks load together in the viewer.
             </p>
           </section>
 
@@ -69,13 +69,13 @@
 
           <section class="panel-card">
             <div class="section-title">
-              <span>Hosted models</span>
-              <small>Ctrl / Shift for multiple</small>
+              <span>Projects</span>
+              <small>Gaussian blocks</small>
             </div>
             <label class="select-control">
-              <span class="visually-hidden">Models</span>
-              <select id="model-select" aria-label="Models" multiple size="5" disabled>
-                <option>No hosted models</option>
+              <span class="visually-hidden">Projects</span>
+              <select id="model-select" aria-label="Projects" multiple size="6" disabled>
+                <option>No projects</option>
               </select>
             </label>
 
@@ -107,30 +107,13 @@
 
           <section class="panel-card">
             <div class="section-title">
-              <span>Scene details</span>
+              <span>Scene</span>
               <small>Live status</small>
             </div>
             <div id="model-info" class="model-info" hidden></div>
             <p class="panel-note">
-              For large sites, publish the same area as separate aligned blocks and load
-              only the blocks you need.
-            </p>
-          </section>
-
-          <section class="panel-card workflow-panel">
-            <div class="section-title">
-              <span>Publishing workflow</span>
-            </div>
-            <div class="workflow-cards" aria-label="Publishing workflow">
-              <span>Upload</span>
-              <span>Process</span>
-              <span>Host</span>
-              <span>Share</span>
-            </div>
-            <p class="panel-note">
-              New submissions should notify the model owner at
-              <a href="mailto:shradaya.poudel@gallimaps.com">shradaya.poudel@gallimaps.com</a>
-              until the Supabase + R2 upload flow is connected.
+              Tip: split large areas into aligned blocks. Select one project to
+              load its Gaussian blocks together.
             </p>
           </section>
         </aside>
@@ -148,10 +131,10 @@
           <div id="empty-panel" class="empty-panel" hidden>
             <span class="empty-icon" aria-hidden="true">GS</span>
             <div class="empty-copy">
-              <strong>Add Gaussian splat files to this dashboard.</strong>
+              <strong>No projects yet.</strong>
               <p>
-                Hosted models appear in the left panel after the owner processes
-                and publishes approved uploads.
+                Upload a project, choose its data type, and add one or more
+                files for approval.
               </p>
             </div>
           </div>
@@ -159,10 +142,10 @@
           <div id="ready-panel" class="empty-panel" hidden>
             <span class="empty-icon" aria-hidden="true">GS</span>
             <div class="empty-copy">
-              <strong>Hosted models are ready.</strong>
+              <strong>Projects are ready.</strong>
               <p>
-                Select one or more models from the left panel, then click
-                Load selected.
+                Select a project from the left panel, then load its Gaussian
+                blocks.
               </p>
             </div>
           </div>
@@ -177,17 +160,10 @@
             </button>
             <span class="empty-icon" aria-hidden="true">UP</span>
             <div class="empty-copy">
-              <strong>Submit a model for approval.</strong>
+              <strong>Upload a project.</strong>
               <p>
-                Local files are preview-only. To make a model shareable, submit
-                the file for approval. After review, the owner will publish
-                approved models to the hosted viewer.
-              </p>
-              <p class="notice-text">
-                Owner notification target:
-                <a href="mailto:shradaya.poudel@gallimaps.com">shradaya.poudel@gallimaps.com</a>.
-                The production upload flow will store files in Cloudflare R2 and
-                metadata in Supabase.
+                Name the project, choose the data type, then add one or more
+                files. Uploads stay private until the owner approves them.
               </p>
               <div class="upload-form">
                 <label>
@@ -218,20 +194,6 @@
                 <button id="cloud-upload-button" class="button button-primary" type="button" disabled>
                   Upload for approval
                 </button>
-                <a
-                  class="button button-secondary"
-                  href="mailto:shradaya.poudel@gallimaps.com?subject=Gaussian model submission&body=I would like to submit a Gaussian model for approval."
-                >
-                  Email fallback
-                </a>
-                <a
-                  class="button button-secondary"
-                  href="https://github.com/shradaya-raj/geosplat-dashboard/actions/workflows/deploy-pages.yml"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Owner publish page
-                </a>
               </div>
               <div id="upload-progress" class="upload-progress" hidden>
                 <span id="upload-file-name">No files selected</span>
@@ -239,12 +201,9 @@
                 <small id="upload-progress-label">Waiting</small>
               </div>
               <ol class="upload-steps">
-                <li>Sign in, enter a project name, choose a data type, then select one or more files.</li>
-                <li>Gaussian files can be viewed now. Mesh, point cloud, and ortho files are stored as project assets for the next viewer modules.</li>
-                <li>The browser uploads directly to Cloudflare R2 through a short-lived signed URL.</li>
-                <li>The backend records every file under the project in Supabase as pending review.</li>
-                <li>The owner processes and approves the model.</li>
-                <li>Refresh this dashboard, select the hosted model, then click Share.</li>
+                <li>Gaussian Splatting files are viewable after approval.</li>
+                <li>Mesh, point cloud, and ortho files are stored in the project for upcoming viewers.</li>
+                <li>Approved Gaussian blocks appear under the project name in the left panel.</li>
               </ol>
             </div>
           </div>

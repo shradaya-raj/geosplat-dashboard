@@ -115,7 +115,10 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = normalizedTheme;
   window.localStorage.setItem("gaussian-viewer-theme", normalizedTheme);
   if (themeToggle) {
-    themeToggle.textContent = normalizedTheme === "dark" ? "Light theme" : "Dark theme";
+    const nextLabel = normalizedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+    themeToggle.textContent = normalizedTheme === "dark" ? "☀" : "☾";
+    themeToggle.setAttribute("aria-label", nextLabel);
+    themeToggle.title = nextLabel;
   }
 }
 
@@ -415,7 +418,7 @@ function showReadyState() {
   emptyPanel.hidden = true;
   readyPanel.hidden = false;
   hideLoading();
-  setStatus("Choose model", "Hosted models are available.", "ready");
+  setStatus("Choose project", "Approved Gaussian projects are available.", "ready");
 }
 
 function hideReadyState() {
@@ -653,7 +656,7 @@ function fillModelSelect() {
 
   if (!models.length) {
     const option = document.createElement("option");
-    option.textContent = "No hosted models";
+    option.textContent = "No projects";
     modelSelect.append(option);
     modelSelect.disabled = true;
     loadSelectedButton.disabled = true;
@@ -908,7 +911,7 @@ async function loadSelectedHostedModels() {
 
   if (!selectedModels.length) {
     showReadyState();
-    showToast("Select one or more hosted blocks first.");
+    showToast("Select a project first.");
     return;
   }
 
