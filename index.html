@@ -31,11 +31,13 @@
           <button id="theme-toggle" class="button button-secondary icon-only" type="button" aria-label="Switch theme" title="Switch theme">
             ☾
           </button>
-          <button id="share-button" class="button button-primary" type="button">
-            Share
+          <button id="share-button" class="button button-primary icon-action" type="button" aria-label="Share project" title="Share project">
+            <span aria-hidden="true">↗</span>
+            <span class="action-label">Share</span>
           </button>
-          <button id="upload-help-button" class="button button-secondary" type="button">
-            Upload project
+          <button id="upload-help-button" class="button button-secondary icon-action" type="button" aria-label="Upload project" title="Upload project">
+            <span aria-hidden="true">↑</span>
+            <span class="action-label">Upload</span>
           </button>
         </div>
       </header>
@@ -43,7 +45,7 @@
       <main class="dashboard">
         <aside class="side-panel" aria-label="Model controls and details">
           <section class="panel-card intro-card">
-            <span class="eyebrow">Project viewer</span>
+            <span class="eyebrow">Workspace</span>
             <h1>Spatial captures, organized beautifully.</h1>
             <p>
               Upload project blocks, track approval, and open approved Gaussian
@@ -57,21 +59,13 @@
             </div>
           </section>
 
-          <section class="panel-card compact-card account-card">
-            <div class="section-title">
-              <span>Account access</span>
-              <small>User workspace</small>
-            </div>
-            <div class="account-status">
-              <span id="account-status">Static viewer mode</span>
-              <small id="account-hint">
-                Connect Supabase Auth and R2 storage to show only each user's own models.
-              </small>
-            </div>
-            <a id="account-action" class="button button-secondary button-full" href="#" hidden>
-              Sign in
-            </a>
-          </section>
+          <div id="account-panel" class="account-panel" aria-live="polite">
+            <span id="account-status">Static viewer mode</span>
+            <small id="account-hint">
+              Connect Supabase Auth and R2 storage to show only each user's own models.
+            </small>
+            <a id="account-action" href="#" hidden>Sign in</a>
+          </div>
 
           <section class="panel-card project-card">
             <div class="section-title">

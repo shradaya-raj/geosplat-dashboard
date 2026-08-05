@@ -289,6 +289,52 @@ function hideUploadPanel() {
   uploadPanel.hidden = true;
 }
 
+async function handleAccountAction() {
+  if (!accountAction) return false;
+
+  if (accountAction.getAttribute("aria-disabled") === "true") {
+    showToast("Connect Supabase Auth and backend API first.");
+    return false;
+  }
+
+  try {
+    if (accountAction.dataset.action === "sign-out") {
+      await signOut();
+      await refreshSession();
+      showToast("Signed out");
+      return true;
+    }
+
+    const choice = window.prompt(
+      "Type one option:\n1 = sign in with password\n2 = create account with password\n3 = magic link email"
+    );
+
+    if (choice === "1") return promptForPasswordAuth("sign in");
+    if (choice === "2") return promptForPasswordAuth("sign up");
+    if (choice === "3") return promptForMagicLink();
+
+    showToast("Sign-in cancelled.");
+    return false;
+  } catch (error) {
+    console.error(error);
+    showToast(error?.message || "Sign-in failed");
+    return false;
+  }
+}
+
+async function handleUploadProjectAction() {
+  await refreshSession();
+
+  if (!currentSession.authenticated) {
+    showToast("Sign in first, then upload your project.");
+    const signedIn = await handleAccountAction();
+    if (!signedIn) return;
+    await refreshSession();
+  }
+
+  if (currentSession.authenticated) showUploadPanel();
+}
+
 function isSupportedModelFile(file) {
   if (!file?.name) return false;
   const lowerName = file.name.toLowerCase();
@@ -1317,50 +1363,13 @@ fileInput.addEventListener("change", () => {
 shareButton.addEventListener("click", shareDashboard);
 accountAction?.addEventListener("click", async (event) => {
   event.preventDefault();
-
-  if (accountAction.getAttribute("aria-disabled") === "true") {
-    showToast("Connect Supabase Auth and backend API first.");
-    return;
-  }
-
-  try {
-    if (accountAction.dataset.action === "sign-out") {
-      await signOut();
-      await refreshSession();
-      showToast("Signed out");
-      return;
-    }
-
-    const choice = window.prompt(
-      "Type one option:\n1 = sign in with password\n2 = create account with password\n3 = magic link email"
-    );
-
-    if (choice === "1") {
-      await promptForPasswordAuth("sign in");
-      return;
-    }
-
-    if (choice === "2") {
-      await promptForPasswordAuth("sign up");
-      return;
-    }
-
-    if (choice === "3") {
-      await promptForMagicLink();
-      return;
-    }
-
-    showToast("Sign-in cancelled.");
-  } catch (error) {
-    console.error(error);
-    showToast(error?.message || "Sign-in failed");
-  }
+  await handleAccountAction();
 });
 themeToggle?.addEventListener("click", () => {
   const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   applyTheme(nextTheme);
 });
-uploadHelpButton.addEventListener("click", showUploadPanel);
+uploadHelpButton.addEventListener("click", handleUploadProjectAction);
 closeUploadPanel.addEventListener("click", hideUploadPanel);
 cloudUploadInput?.addEventListener("change", () => {
   selectedCloudUploadFiles = [...cloudUploadInput.files];
