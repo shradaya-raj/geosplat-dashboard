@@ -652,6 +652,26 @@ function getSceneFormat(model) {
   return extension ? sceneFormatByExtension[extension] : undefined;
 }
 
+function getProjectStatusSummary(entry) {
+  const statusCounts = entry.indexes.reduce((counts, index) => {
+    const status = models[index]?.status || "published";
+    counts[status] = (counts[status] || 0) + 1;
+    return counts;
+  }, {});
+  const loadableCount = entry.indexes.filter((index) => models[index]?.canLoad).length;
+
+  if (statusCounts.pending) return `⏳ Pending review • ${statusCounts.pending}/${entry.indexes.length}`;
+  if (statusCounts.processing) return `⚙ Processing • ${statusCounts.processing}/${entry.indexes.length}`;
+  if (statusCounts.uploading) return `⇧ Uploading • ${statusCounts.uploading}/${entry.indexes.length}`;
+  if (statusCounts.rejected) return `⚠ Rejected • ${statusCounts.rejected}/${entry.indexes.length}`;
+  if (loadableCount) {
+    const fileLabel = entry.indexes.length === 1 ? "1 file" : `${entry.indexes.length} files`;
+    return `✓ Ready • ${fileLabel}`;
+  }
+
+  return "• Not ready";
+}
+
 function fillModelSelect() {
   modelSelect.replaceChildren();
   modelSelectEntries = [];
@@ -688,13 +708,7 @@ function fillModelSelect() {
     modelSelectEntries.push(entry);
     const option = document.createElement("option");
     option.value = String(modelSelectEntries.length - 1);
-    const fileLabel = entry.indexes.length === 1 ? "1 file" : `${entry.indexes.length} files`;
-    const statuses = [...new Set(entry.indexes.map((index) => models[index]?.status).filter(Boolean))];
-    const loadableCount = entry.indexes.filter((index) => models[index]?.canLoad).length;
-    const statusLabel = loadableCount
-      ? fileLabel
-      : statuses.length ? statuses.join(", ") : fileLabel;
-    option.textContent = `${entry.label} (${statusLabel})`;
+    option.textContent = `${entry.label} — ${getProjectStatusSummary(entry)}`;
     modelSelect.append(option);
   }
 
