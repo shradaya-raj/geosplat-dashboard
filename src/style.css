@@ -754,7 +754,7 @@ html[data-state="error"] .live-dot {
 }
 
 .upload-panel {
-  width: min(680px, calc(100% - 40px));
+  width: min(760px, calc(100% - 40px));
   max-height: calc(100% - 48px);
   overflow: auto;
   padding: 30px;
@@ -792,7 +792,7 @@ html[data-state="error"] .live-dot {
 
 .upload-form {
   display: grid;
-  grid-template-columns: 1fr 230px;
+  grid-template-columns: 1fr;
   gap: 12px;
   margin: 18px 0 0;
 }
@@ -805,8 +805,7 @@ html[data-state="error"] .live-dot {
   font-weight: 850;
 }
 
-.upload-form input,
-.upload-form select {
+.upload-form input {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -817,10 +816,121 @@ html[data-state="error"] .live-dot {
 }
 
 .upload-form input:focus,
-.upload-form select:focus,
 .select-control select:focus {
   border-color: color-mix(in srgb, var(--accent-2) 50%, var(--line));
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-2) 14%, transparent);
+}
+
+.upload-type-picker {
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.upload-type-picker legend {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.upload-type-picker p {
+  margin: 5px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.upload-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.upload-type-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel-solid) 72%, transparent);
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.upload-type-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent-2) 34%, var(--line));
+}
+
+.upload-type-card:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent-2) 65%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 13%, var(--panel-solid));
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--accent-2) 11%, transparent);
+}
+
+.upload-type-card input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent-2);
+}
+
+.upload-type-card span {
+  display: grid;
+  gap: 4px;
+}
+
+.upload-type-card strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.upload-type-card small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.upload-file-groups {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.upload-file-group {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel-solid) 72%, transparent);
+}
+
+.upload-file-group[hidden] {
+  display: none;
+}
+
+.upload-file-group > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.upload-file-group strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.upload-file-group small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .upload-progress {
@@ -1003,6 +1113,11 @@ code {
   }
 
   .upload-form {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-type-grid,
+  .upload-file-group {
     grid-template-columns: 1fr;
   }
 

@@ -156,7 +156,7 @@
             <div class="empty-copy upload-copy">
               <strong>Upload a project</strong>
               <p>
-                Name the project, choose the data type, then add one or more
+                Name the project, choose the data types, then add one or more
                 files. Uploads stay private until the owner approves them.
               </p>
               <div class="upload-form">
@@ -164,27 +164,76 @@
                   <span>Project name</span>
                   <input id="upload-project-name" type="text" placeholder="e.g. Patan Block Survey" maxlength="140" />
                 </label>
-                <label>
-                  <span>Data type</span>
-                  <select id="upload-asset-type">
-                    <option value="gaussian_splatting">Gaussian Splatting</option>
-                    <option value="mesh_3d">3D Mesh</option>
-                    <option value="point_cloud">Point Cloud</option>
-                    <option value="orthomosaic">Ortho / Orthomosaic</option>
-                  </select>
-                </label>
+              </div>
+              <fieldset class="upload-type-picker">
+                <legend>Project data types</legend>
+                <p>Select one or more data types for this project.</p>
+                <div class="upload-type-grid">
+                  <label class="upload-type-card">
+                    <input type="checkbox" value="gaussian_splatting" data-upload-asset-type checked />
+                    <span>
+                      <strong>Gaussian Splatting</strong>
+                      <small>.ply, .splat, .ksplat, .spz</small>
+                    </span>
+                  </label>
+                  <label class="upload-type-card">
+                    <input type="checkbox" value="mesh_3d" data-upload-asset-type />
+                    <span>
+                      <strong>3D Mesh</strong>
+                      <small>.obj, .fbx, .glb, .gltf, .stl</small>
+                    </span>
+                  </label>
+                  <label class="upload-type-card">
+                    <input type="checkbox" value="point_cloud" data-upload-asset-type />
+                    <span>
+                      <strong>Point Cloud</strong>
+                      <small>.las, .laz, .pcd, .xyz, .e57</small>
+                    </span>
+                  </label>
+                  <label class="upload-type-card">
+                    <input type="checkbox" value="orthomosaic" data-upload-asset-type />
+                    <span>
+                      <strong>Ortho / Orthomosaic</strong>
+                      <small>.tif, .png, .jpg, .webp, .jp2</small>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+              <div class="upload-file-groups">
+                <div class="upload-file-group" data-upload-file-group="gaussian_splatting">
+                  <div>
+                    <strong>Gaussian Splatting files</strong>
+                    <small data-upload-file-summary="gaussian_splatting">No files selected</small>
+                  </div>
+                  <label class="button button-secondary" for="cloud-upload-input-gaussian">Choose files</label>
+                  <input id="cloud-upload-input-gaussian" type="file" accept=".ply,.splat,.ksplat,.spz" data-upload-file-input="gaussian_splatting" multiple hidden />
+                </div>
+                <div class="upload-file-group" data-upload-file-group="mesh_3d" hidden>
+                  <div>
+                    <strong>3D Mesh files</strong>
+                    <small data-upload-file-summary="mesh_3d">No files selected</small>
+                  </div>
+                  <label class="button button-secondary" for="cloud-upload-input-mesh">Choose files</label>
+                  <input id="cloud-upload-input-mesh" type="file" accept=".obj,.fbx,.glb,.gltf,.stl,.dae,.3dm,.zip" data-upload-file-input="mesh_3d" multiple hidden />
+                </div>
+                <div class="upload-file-group" data-upload-file-group="point_cloud" hidden>
+                  <div>
+                    <strong>Point Cloud files</strong>
+                    <small data-upload-file-summary="point_cloud">No files selected</small>
+                  </div>
+                  <label class="button button-secondary" for="cloud-upload-input-pointcloud">Choose files</label>
+                  <input id="cloud-upload-input-pointcloud" type="file" accept=".ply,.las,.laz,.pcd,.xyz,.pts,.e57,.zip" data-upload-file-input="point_cloud" multiple hidden />
+                </div>
+                <div class="upload-file-group" data-upload-file-group="orthomosaic" hidden>
+                  <div>
+                    <strong>Ortho / Orthomosaic files</strong>
+                    <small data-upload-file-summary="orthomosaic">No files selected</small>
+                  </div>
+                  <label class="button button-secondary" for="cloud-upload-input-ortho">Choose files</label>
+                  <input id="cloud-upload-input-ortho" type="file" accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg,.webp,.jp2,.zip" data-upload-file-input="orthomosaic" multiple hidden />
+                </div>
               </div>
               <div class="upload-actions">
-                <label class="button button-primary" for="cloud-upload-input">
-                  Choose files
-                </label>
-                <input
-                  id="cloud-upload-input"
-                  type="file"
-                  accept=".ply,.splat,.ksplat,.spz,.obj,.fbx,.glb,.gltf,.stl,.dae,.3dm,.zip,.las,.laz,.pcd,.xyz,.pts,.e57,.tif,.tiff,.geotiff,.png,.jpg,.jpeg,.webp,.jp2"
-                  multiple
-                  hidden
-                />
                 <button id="cloud-upload-button" class="button button-primary" type="button" disabled>
                   Upload for approval
                 </button>

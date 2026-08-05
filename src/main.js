@@ -66,10 +66,15 @@ const profileMenuButton = document.querySelector("#profile-menu-button");
 const profileMenu = document.querySelector("#profile-menu");
 const uploadPanel = document.querySelector("#upload-panel");
 const closeUploadPanel = document.querySelector("#close-upload-panel");
-const cloudUploadInput = document.querySelector("#cloud-upload-input");
 const cloudUploadButton = document.querySelector("#cloud-upload-button");
 const uploadProjectName = document.querySelector("#upload-project-name");
-const uploadAssetType = document.querySelector("#upload-asset-type");
+const uploadAssetTypeInputs = [...document.querySelectorAll("[data-upload-asset-type]")];
+const uploadFileInputs = [...document.querySelectorAll("[data-upload-file-input]")];
+const uploadFileGroups = [...document.querySelectorAll("[data-upload-file-group]")];
+const uploadFileSummaries = new Map(
+  [...document.querySelectorAll("[data-upload-file-summary]")]
+    .map((element) => [element.dataset.uploadFileSummary, element])
+);
 const uploadProgress = document.querySelector("#upload-progress");
 const uploadFileName = document.querySelector("#upload-file-name");
 const uploadProgressBar = document.querySelector("#upload-progress-bar");
@@ -363,15 +368,73 @@ function isSupportedModelFile(file) {
   return SUPPORTED_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
 }
 
-function getSelectedUploadAssetType() {
-  return uploadAssetType?.value || "gaussian_splatting";
+function getSelectedUploadAssetTypes() {
+  return uploadAssetTypeInputs
+    .filter((input) => input.checked)
+    .map((input) => input.value);
 }
 
-function isSupportedAssetUploadFile(file, assetType = getSelectedUploadAssetType()) {
+function isSupportedAssetUploadFile(file, assetType = "gaussian_splatting") {
   if (!file?.name) return false;
   const lowerName = file.name.toLowerCase();
   const extensions = UPLOAD_EXTENSIONS_BY_TYPE[assetType] || UPLOAD_EXTENSIONS_BY_TYPE.gaussian_splatting;
   return extensions.some((extension) => lowerName.endsWith(extension));
+}
+
+function getUploadFilesByType() {
+  const selectedTypes = new Set(getSelectedUploadAssetTypes());
+  const filesByType = new Map();
+
+  for (const input of uploadFileInputs) {
+    const assetType = input.dataset.uploadFileInput;
+    if (!selectedTypes.has(assetType)) continue;
+
+    const files = [...input.files];
+    if (files.length) filesByType.set(assetType, files);
+  }
+
+  return filesByType;
+}
+
+function getUploadSelectionSummary() {
+  const filesByType = getUploadFilesByType();
+  const files = [...filesByType.values()].flat();
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  return { filesByType, files, totalBytes };
+}
+
+function updateUploadFileSummaries() {
+  for (const input of uploadFileInputs) {
+    const assetType = input.dataset.uploadFileInput;
+    const files = [...input.files];
+    const bytes = files.reduce((sum, file) => sum + file.size, 0);
+    const summary = uploadFileSummaries.get(assetType);
+    if (!summary) continue;
+
+    summary.textContent = files.length
+      ? `${files.length} file${files.length === 1 ? "" : "s"} • ${formatBytes(bytes)}`
+      : "No files selected";
+  }
+
+  selectedCloudUploadFiles = getUploadSelectionSummary().files;
+}
+
+function updateUploadTypeVisibility() {
+  const selectedTypes = new Set(getSelectedUploadAssetTypes());
+
+  for (const group of uploadFileGroups) {
+    const assetType = group.dataset.uploadFileGroup;
+    const isVisible = selectedTypes.has(assetType);
+    group.hidden = !isVisible;
+
+    if (!isVisible) {
+      const input = uploadFileInputs.find((fileInputElement) => fileInputElement.dataset.uploadFileInput === assetType);
+      if (input) input.value = "";
+    }
+  }
+
+  updateUploadFileSummaries();
+  refreshUploadControls();
 }
 
 function setUploadProgress(label, percent = 0) {
@@ -385,16 +448,19 @@ function setUploadProgress(label, percent = 0) {
 function refreshUploadControls() {
   if (!cloudUploadButton) return;
 
+  const { files, totalBytes } = getUploadSelectionSummary();
+  selectedCloudUploadFiles = files;
+
   const canUpload = Boolean(
     isBackendEnabled()
     && currentSession.authenticated
     && selectedCloudUploadFiles.length
+    && getSelectedUploadAssetTypes().length
   );
 
   cloudUploadButton.disabled = !canUpload;
 
   if (uploadFileName) {
-    const totalBytes = selectedCloudUploadFiles.reduce((sum, file) => sum + file.size, 0);
     uploadFileName.textContent = selectedCloudUploadFiles.length
       ? `${selectedCloudUploadFiles.length} file${selectedCloudUploadFiles.length === 1 ? "" : "s"} selected (${formatBytes(totalBytes)})`
       : "No files selected";
@@ -1143,17 +1209,26 @@ async function loadLocalFile(file) {
 }
 
 async function uploadSelectedCloudFile() {
+  const { filesByType, files } = getUploadSelectionSummary();
+  selectedCloudUploadFiles = files;
+
   if (!selectedCloudUploadFiles.length) {
     showToast("Choose one or more files first.");
     return;
   }
 
-  const assetType = getSelectedUploadAssetType();
-  const assetLabel = ASSET_TYPE_LABELS[assetType] || "selected data type";
-  const unsupported = selectedCloudUploadFiles.find((file) => !isSupportedAssetUploadFile(file, assetType));
-  if (unsupported) {
-    showToast(`${unsupported.name} is not supported for ${assetLabel}.`);
+  if (!getSelectedUploadAssetTypes().length) {
+    showToast("Choose at least one project data type.");
     return;
+  }
+
+  for (const [assetType, typeFiles] of filesByType.entries()) {
+    const assetLabel = ASSET_TYPE_LABELS[assetType] || "selected data type";
+    const unsupported = typeFiles.find((file) => !isSupportedAssetUploadFile(file, assetType));
+    if (unsupported) {
+      showToast(`${unsupported.name} is not supported for ${assetLabel}.`);
+      return;
+    }
   }
 
   const projectName = uploadProjectName?.value?.trim();
@@ -1180,48 +1255,56 @@ async function uploadSelectedCloudFile() {
   try {
     let projectId = null;
     const totalFiles = selectedCloudUploadFiles.length;
+    let processedFiles = 0;
 
-    for (const [fileIndex, file] of selectedCloudUploadFiles.entries()) {
-      const baseProgress = Math.round((fileIndex / totalFiles) * 100);
-      setUploadProgress(`Preparing file ${fileIndex + 1}/${totalFiles}: ${file.name}`, baseProgress);
+    for (const [assetType, typeFiles] of filesByType.entries()) {
+      const assetLabel = ASSET_TYPE_LABELS[assetType] || "data";
 
-      const uploadSession = await createUploadSession(file, {
-        projectId,
-        projectName,
-        assetType
-      });
-      if (!uploadSession?.uploadUrl || !uploadSession?.modelId || !uploadSession?.key) {
-        throw new Error("Upload session was not created.");
-      }
+      for (const file of typeFiles) {
+        const baseProgress = Math.round((processedFiles / totalFiles) * 100);
+        setUploadProgress(`Preparing ${assetLabel} ${processedFiles + 1}/${totalFiles}: ${file.name}`, baseProgress);
 
-      projectId = uploadSession.projectId || projectId;
-
-      await uploadFileToSignedUrl({
-        file,
-        uploadUrl: uploadSession.uploadUrl,
-        headers: uploadSession.headers,
-        onProgress: (percent) => {
-          const fileProgress = percent / totalFiles;
-          setUploadProgress(
-            `Sending file ${fileIndex + 1}/${totalFiles}: ${percent}%`,
-            Math.min(96, baseProgress + fileProgress)
-          );
+        const uploadSession = await createUploadSession(file, {
+          projectId,
+          projectName,
+          assetType
+        });
+        if (!uploadSession?.uploadUrl || !uploadSession?.modelId || !uploadSession?.key) {
+          throw new Error("Upload session was not created.");
         }
-      });
 
-      setUploadProgress(`Finalizing file ${fileIndex + 1}/${totalFiles}...`, Math.min(98, baseProgress + 95 / totalFiles));
-      await completeUploadSession({
-        modelId: uploadSession.modelId,
-        key: uploadSession.key,
-        file
-      });
+        projectId = uploadSession.projectId || projectId;
+
+        await uploadFileToSignedUrl({
+          file,
+          uploadUrl: uploadSession.uploadUrl,
+          headers: uploadSession.headers,
+          onProgress: (percent) => {
+            const fileProgress = percent / totalFiles;
+            setUploadProgress(
+              `Uploading ${assetLabel} ${processedFiles + 1}/${totalFiles}: ${percent}%`,
+              Math.min(96, baseProgress + fileProgress)
+            );
+          }
+        });
+
+        setUploadProgress(`Finalizing ${assetLabel} ${processedFiles + 1}/${totalFiles}...`, Math.min(98, baseProgress + 95 / totalFiles));
+        await completeUploadSession({
+          modelId: uploadSession.modelId,
+          key: uploadSession.key,
+          file
+        });
+
+        processedFiles += 1;
+      }
     }
 
     setUploadProgress("Uploaded. Waiting for owner approval.", 100);
     showToast(`${selectedCloudUploadFiles.length} file${selectedCloudUploadFiles.length === 1 ? "" : "s"} uploaded for approval.`);
     startModelRefreshPolling();
     selectedCloudUploadFiles = [];
-    if (cloudUploadInput) cloudUploadInput.value = "";
+    for (const input of uploadFileInputs) input.value = "";
+    updateUploadFileSummaries();
     refreshUploadControls();
   } catch (error) {
     console.error(error);
@@ -1400,30 +1483,25 @@ themeToggle?.addEventListener("click", () => {
 });
 uploadHelpButton.addEventListener("click", showUploadPanel);
 closeUploadPanel.addEventListener("click", hideUploadPanel);
-cloudUploadInput?.addEventListener("change", () => {
-  selectedCloudUploadFiles = [...cloudUploadInput.files];
+for (const input of uploadFileInputs) {
+  input.addEventListener("change", () => {
+    const assetType = input.dataset.uploadFileInput;
+    const assetLabel = ASSET_TYPE_LABELS[assetType] || "selected data type";
+    const files = [...input.files];
+    const unsupported = files.find((file) => !isSupportedAssetUploadFile(file, assetType));
 
-  const assetType = getSelectedUploadAssetType();
-  const unsupported = selectedCloudUploadFiles.find((file) => !isSupportedAssetUploadFile(file, assetType));
-  if (unsupported) {
-    showToast(`${unsupported.name} is not supported for ${ASSET_TYPE_LABELS[assetType]}.`);
-    selectedCloudUploadFiles = [];
-    cloudUploadInput.value = "";
-  }
+    if (unsupported) {
+      showToast(`${unsupported.name} is not supported for ${assetLabel}.`);
+      input.value = "";
+    }
 
-  refreshUploadControls();
-});
-uploadAssetType?.addEventListener("change", () => {
-  if (!selectedCloudUploadFiles.length) return;
-  const assetType = getSelectedUploadAssetType();
-  const unsupported = selectedCloudUploadFiles.find((file) => !isSupportedAssetUploadFile(file, assetType));
-  if (unsupported) {
-    showToast(`Selection cleared. ${unsupported.name} does not match ${ASSET_TYPE_LABELS[assetType]}.`);
-    selectedCloudUploadFiles = [];
-    if (cloudUploadInput) cloudUploadInput.value = "";
-  }
-  refreshUploadControls();
-});
+    updateUploadFileSummaries();
+    refreshUploadControls();
+  });
+}
+for (const input of uploadAssetTypeInputs) {
+  input.addEventListener("change", updateUploadTypeVisibility);
+}
 cloudUploadButton?.addEventListener("click", uploadSelectedCloudFile);
 uploadPanel.addEventListener("click", (event) => {
   if (event.target === uploadPanel) hideUploadPanel();
@@ -1466,6 +1544,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 applyTheme(window.localStorage.getItem("gaussian-viewer-theme") || "light");
+updateUploadTypeVisibility();
 
 async function startDashboard() {
   try {
