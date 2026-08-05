@@ -27,3 +27,7 @@ services:
         value: /geosplat-dashboard/
       - key: OWNER_EMAIL
         value: shradaya.poudel@gallimaps.com
+      - key: APPROVAL_EMAIL
+        value: shradayarajpoudel@gmail.com
+      - key: EMAIL_FROM
+        value: Gaussian Viewer <onboarding@resend.dev>

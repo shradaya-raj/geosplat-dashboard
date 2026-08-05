@@ -84,6 +84,18 @@ export async function getSupabaseModelsByIds(ids) {
   return data || [];
 }
 
+export async function getSupabaseModelByApprovalToken(token) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("models")
+    .select("*")
+    .eq("metadata->>approvalToken", token)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
 export async function createSupabaseShare({ token, ownerId, modelIds, expiresAt = null }) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase

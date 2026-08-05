@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { config } from "./config.js";
+import { sendApprovalEmail } from "./email.js";
 import { authPending, getSessionPayload, requireAuth } from "./auth.js";
 import {
   buildModelKey,
@@ -17,7 +18,8 @@ import {
   getRepositoryMode,
   listPublishedDemoModels,
   listPublishedUserModels,
-  markModelUploadComplete
+  markModelUploadComplete,
+  reviewModelByApprovalToken
 } from "./model-repository.js";
 
 function frontendUrl(search = "") {
@@ -25,6 +27,20 @@ function frontendUrl(search = "") {
     ? config.frontendAppPath
     : `/${config.frontendAppPath}`;
   return `${config.frontendOrigin}${path}${search}`;
+}
+
+function backendUrl(path = "") {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${config.backendBaseUrl}${normalizedPath}`;
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function extensionOf(filename = "") {
@@ -212,11 +228,66 @@ export function createRouter() {
         filename: req.body?.filename
       });
 
+      const approvalToken = record.approvalToken;
+      if (approvalToken) {
+        const approveUrl = backendUrl(`/api/admin/review-model?token=${encodeURIComponent(approvalToken)}&decision=approve`);
+        const rejectUrl = backendUrl(`/api/admin/review-model?token=${encodeURIComponent(approvalToken)}&decision=reject`);
+        sendApprovalEmail({
+          model: record,
+          uploadedBy: req.session.user.email,
+          approveUrl,
+          rejectUrl
+        }).catch((error) => {
+          console.error("Approval email failed.", error);
+        });
+      }
+
       return res.json({
         ok: true,
         model: record,
-        message: `Upload received. ${config.ownerEmail} should review/process it before publishing.`
+        message: `Upload received. ${config.approvalEmail} should review/process it before publishing.`
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/api/admin/review-model", async (req, res, next) => {
+    try {
+      const token = typeof req.query.token === "string" ? req.query.token : "";
+      const decision = req.query.decision === "reject" ? "reject" : "approve";
+      if (!token) return res.status(400).send("Missing approval token.");
+
+      const model = await reviewModelByApprovalToken({ token, decision });
+      if (!model) {
+        return res.status(404).send("This approval link is invalid, expired, or already used.");
+      }
+
+      const statusLabel = decision === "reject" ? "rejected" : "published";
+      const openUrl = frontendUrl(`?model=${encodeURIComponent(model.slug || model.name || model.id)}`);
+      const safeModelName = escapeHtml(model.name);
+      res.type("html").send(`
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Model ${statusLabel}</title>
+            <style>
+              body { font-family: Arial, sans-serif; background: #f4f8ef; color: #162019; display: grid; min-height: 100vh; place-items: center; margin: 0; }
+              main { max-width: 560px; padding: 32px; border-radius: 24px; background: white; box-shadow: 0 20px 60px rgba(30, 60, 40, .14); }
+              a { color: #087b4b; font-weight: 700; }
+            </style>
+          </head>
+          <body>
+            <main>
+              <h1>Model ${statusLabel}</h1>
+              <p><strong>${safeModelName}</strong> has been ${statusLabel}.</p>
+              ${decision === "reject" ? "" : `<p><a href="${openUrl}">Open the dashboard</a></p>`}
+            </main>
+          </body>
+        </html>
+      `);
     } catch (error) {
       next(error);
     }

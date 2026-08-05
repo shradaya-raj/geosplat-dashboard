@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "check": "node --check src/server.js && node --check src/config.js && node --check src/routes.js && node --check src/auth.js && node --check src/model-repository.js && node --check src/r2.js && node --check src/supabase-admin.js && node --check src/set-auth-user-password.js",
+    "check": "node --check src/server.js && node --check src/config.js && node --check src/routes.js && node --check src/auth.js && node --check src/email.js && node --check src/model-repository.js && node --check src/r2.js && node --check src/store.js && node --check src/supabase-admin.js && node --check src/set-auth-user-password.js",
     "diagnose:r2": "node src/diagnose-r2.js",
     "dev": "node --watch src/server.js",
     "set-user-password": "node src/set-auth-user-password.js",

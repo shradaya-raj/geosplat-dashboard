@@ -4,6 +4,7 @@ import { getExtension } from "./r2.js";
 import {
   createModelRecord,
   createSupabaseShare,
+  getSupabaseModelByApprovalToken,
   getSupabaseModelsByIds,
   getSupabaseShare,
   isSupabaseConfigured,
@@ -13,6 +14,7 @@ import {
 } from "./supabase-admin.js";
 import {
   createShare,
+  getModelByApprovalToken,
   getModelsByIds,
   getShare,
   listDemoModels,
@@ -46,7 +48,8 @@ function rowToModel(row) {
     rotation: row.rotation,
     scale: row.scale,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    approvalToken: row.metadata?.approvalToken || null
   };
 }
 
@@ -131,6 +134,7 @@ export async function markModelUploadComplete({ modelId, user, r2Key, objectInfo
   const resolvedFilename = filename || objectInfo.key.split("/").pop();
   const extension = getExtension(resolvedFilename || objectInfo.key);
   const progressiveLoad = extension !== ".ply";
+  const approvalToken = nanoid(40);
   const [existingModel] = await getModelsOwnedByUser([modelId], user.id);
 
   if (!existingModel) {
@@ -157,7 +161,9 @@ export async function markModelUploadComplete({ modelId, user, r2Key, objectInfo
       metadata: {
         ownerEmail: user.email,
         source: "r2-original",
-        contentType: objectInfo.contentType
+        contentType: objectInfo.contentType,
+        approvalToken,
+        approvalRequestedAt: new Date().toISOString()
       }
     }, user.id);
 
@@ -175,7 +181,42 @@ export async function markModelUploadComplete({ modelId, user, r2Key, objectInfo
     r2Key,
     status: "pending",
     source: "r2-original",
-    progressiveLoad
+    progressiveLoad,
+    approvalToken
+  });
+}
+
+export async function reviewModelByApprovalToken({ token, decision }) {
+  const nextStatus = decision === "reject" ? "rejected" : "published";
+
+  if (useSupabase()) {
+    const row = await getSupabaseModelByApprovalToken(token);
+    if (!row || !["pending", "processing"].includes(row.status)) return null;
+
+    const metadata = {
+      ...(row.metadata || {}),
+      approvalToken: null,
+      reviewedAt: new Date().toISOString(),
+      reviewDecision: nextStatus
+    };
+
+    const updated = await updateModelRecord(row.id, {
+      status: nextStatus,
+      metadata
+    });
+
+    return rowToModel(updated);
+  }
+
+  const model = await getModelByApprovalToken(token);
+  if (!model || !["pending", "processing"].includes(model.status)) return null;
+
+  return upsertModel({
+    ...model,
+    status: nextStatus,
+    approvalToken: null,
+    reviewedAt: new Date().toISOString(),
+    reviewDecision: nextStatus
   });
 }
 

@@ -204,9 +204,16 @@ R2_SIGNED_URL_EXPIRES_SECONDS=3600
 MAX_UPLOAD_BYTES=107374182400
 
 OWNER_EMAIL=shradaya.poudel@gallimaps.com
+APPROVAL_EMAIL=shradayarajpoudel@gmail.com
+EMAIL_FROM=Gaussian Viewer <onboarding@resend.dev>
+RESEND_API_KEY=your-resend-api-key
 ```
 
 Keep `R2_PUBLIC_BASE_URL` empty for private signed download URLs.
+
+`RESEND_API_KEY` enables approval emails. Without it, uploaded models are still
+stored as pending, but the approval link is printed in backend logs instead of
+being emailed.
 
 ### 2. Rebuild GitHub Pages with backend values
 

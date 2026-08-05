@@ -98,6 +98,11 @@ export async function getModelsByIds(ids) {
   return store.models.filter((model) => wanted.has(model.id));
 }
 
+export async function getModelByApprovalToken(token) {
+  const store = await readStore();
+  return store.models.find((model) => model.approvalToken === token) || null;
+}
+
 export async function createShare({ modelIds, ownerUserId, expiresAt = null }) {
   const store = await readStore();
   const share = {

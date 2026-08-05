@@ -14,8 +14,13 @@ export const config = {
   backendBaseUrl: required("BACKEND_BASE_URL", "http://localhost:8787").replace(/\/$/, ""),
   sessionSecret: required("SESSION_SECRET", "dev-only-change-me"),
   ownerEmail: required("OWNER_EMAIL", "shradaya.poudel@gallimaps.com"),
+  approvalEmail: process.env.APPROVAL_EMAIL || process.env.OWNER_EMAIL || "shradaya.poudel@gallimaps.com",
   demoModelUrl: process.env.DEMO_MODEL_URL || "",
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 100 * 1024 * 1024 * 1024),
+  email: {
+    resendApiKey: process.env.RESEND_API_KEY || "",
+    from: process.env.EMAIL_FROM || "Gaussian Viewer <onboarding@resend.dev>"
+  },
   storage: {
     provider: process.env.STORAGE_PROVIDER || "r2"
   },

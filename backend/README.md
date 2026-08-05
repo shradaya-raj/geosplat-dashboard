@@ -49,6 +49,9 @@ R2_PUBLIC_BASE_URL=
 R2_SIGNED_URL_EXPIRES_SECONDS=3600
 
 OWNER_EMAIL=shradaya.poudel@gallimaps.com
+APPROVAL_EMAIL=shradayarajpoudel@gmail.com
+EMAIL_FROM=Gaussian Viewer <onboarding@resend.dev>
+RESEND_API_KEY=
 DEMO_MODEL_URL=
 MAX_UPLOAD_BYTES=107374182400
 ```
@@ -155,3 +158,17 @@ gaussian-models/
 
 R2 objects should remain private. The backend returns short-lived signed URLs
 only when the user has permission.
+
+## Email approval links
+
+When `RESEND_API_KEY` is configured, every completed upload sends an approval
+email to `APPROVAL_EMAIL`. The email contains one-time approve/reject links.
+
+```text
+APPROVAL_EMAIL=shradayarajpoudel@gmail.com
+EMAIL_FROM=Gaussian Viewer <onboarding@resend.dev>
+RESEND_API_KEY=your-resend-api-key
+```
+
+Until `RESEND_API_KEY` is added, uploads still work, but the backend only logs
+the approval link in Render logs.
