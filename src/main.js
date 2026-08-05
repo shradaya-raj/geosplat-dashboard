@@ -1089,13 +1089,13 @@ async function shareDashboard() {
 
 async function downloadOriginalModel() {
   if (!activeModels.length || activeModels.length !== 1 || activeModels[0]?.sharedViewOnly) {
-    showToast("Download is available only to the model owner.");
+    showToast("Original export is available only to the model owner.");
     return;
   }
 
   try {
     const payload = await getOwnerDownloadUrl(activeModels[0].id);
-    if (!payload?.url) throw new Error("Download link was not created.");
+    if (!payload?.url) throw new Error("Original export link was not created.");
 
     const link = document.createElement("a");
     link.href = payload.url;
@@ -1104,10 +1104,10 @@ async function downloadOriginalModel() {
     document.body.append(link);
     link.click();
     link.remove();
-    showToast("Owner download link opened.");
+    showToast("Owner export link opened.");
   } catch (error) {
     console.error(error);
-    showToast(error?.message || "Download is not available.");
+    showToast(error?.message || "Original export is not available.");
   }
 }
 
