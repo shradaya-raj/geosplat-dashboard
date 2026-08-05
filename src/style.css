@@ -503,6 +503,32 @@ html[data-state="error"] .live-dot {
   animation: spin 0.9s linear infinite;
 }
 
+.model-load-progress {
+  width: min(300px, 100%);
+  height: 10px;
+  margin: 6px 0 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.model-load-progress[hidden] {
+  display: none;
+}
+
+.model-load-progress::-webkit-progress-bar {
+  background: var(--line);
+}
+
+.model-load-progress::-webkit-progress-value {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.model-load-progress::-moz-progress-bar {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
 .loading-panel strong,
 .empty-copy strong {
   color: var(--ink);

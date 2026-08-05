@@ -24,6 +24,7 @@ const MAX_LOCAL_PREVIEW_BYTES = 350 * 1024 * 1024;
 const MAX_LOCAL_PLY_PREVIEW_BYTES = 150 * 1024 * 1024;
 const LARGE_HOSTED_MODEL_BYTES = 125 * 1024 * 1024;
 const STALLED_LOAD_WARNING_MS = 45000;
+const MODEL_REFRESH_INTERVAL_MS = 12000;
 let GaussianSplats3D;
 let THREE;
 let sceneFormatByExtension = {};
@@ -32,6 +33,7 @@ const connectionLabel = document.querySelector("#connection-label");
 const loadingPanel = document.querySelector("#loading-panel");
 const loadingTitle = document.querySelector("#loading-title");
 const loadingDetail = document.querySelector("#loading-detail");
+const modelLoadProgress = document.querySelector("#model-load-progress");
 const emptyPanel = document.querySelector("#empty-panel");
 const readyPanel = document.querySelector("#ready-panel");
 const viewerElement = document.querySelector("#viewer");
@@ -73,6 +75,7 @@ let activeLoadToken = 0;
 let loadingWatchdog = null;
 let selectedCloudUploadFile = null;
 let currentModelSource = "static";
+let modelRefreshTimer = null;
 
 async function loadViewerLibraries() {
   if (GaussianSplats3D && THREE) return;
@@ -138,6 +141,19 @@ function setStatus(label, detail, state = "loading") {
   loadingTitle.textContent = label;
   loadingDetail.textContent = detail;
   document.documentElement.dataset.state = state;
+}
+
+function setModelLoadProgress(percent) {
+  if (!modelLoadProgress) return;
+
+  if (!Number.isFinite(percent)) {
+    modelLoadProgress.hidden = true;
+    modelLoadProgress.value = 0;
+    return;
+  }
+
+  modelLoadProgress.hidden = false;
+  modelLoadProgress.value = Math.max(0, Math.min(100, Math.round(percent)));
 }
 
 function clearLoadingWatchdog() {
@@ -342,11 +358,13 @@ async function refreshSession() {
 function showLoading(title, detail) {
   loadingPanel.hidden = false;
   loadingPanel.classList.remove("is-error", "is-complete");
+  setModelLoadProgress(null);
   setStatus(title, detail);
 }
 
 function hideLoading() {
   clearLoadingWatchdog();
+  setModelLoadProgress(null);
   loadingPanel.classList.add("is-complete");
   window.setTimeout(() => {
     loadingPanel.hidden = true;
@@ -623,6 +641,57 @@ function fillModelSelect() {
   pointModeButton.disabled = true;
 }
 
+function modelsChanged(nextModels) {
+  if (nextModels.length !== models.length) return true;
+
+  return nextModels.some((model, index) => {
+    const current = models[index];
+    return model.id !== current?.id
+      || model.path !== current?.path
+      || model.name !== current?.name
+      || model.status !== current?.status;
+  });
+}
+
+async function refreshHostedModels({ silent = true } = {}) {
+  if (!isBackendEnabled() || activeObjectUrl) return;
+  const searchParams = new URLSearchParams(window.location.search);
+  if (searchParams.has("share")) return;
+
+  const nextModels = await loadManifest().catch((error) => {
+    if (!silent) showToast(error?.message || "Could not refresh models.");
+    return null;
+  });
+
+  if (!nextModels || !modelsChanged(nextModels)) return;
+
+  const previousSelection = getSelectedModelIndexes()
+    .map((index) => models[index]?.id || models[index]?.slug)
+    .filter(Boolean);
+
+  models = nextModels;
+  fillModelSelect();
+
+  const nextSelection = previousSelection
+    .map((id) => models.findIndex((model) => model.id === id || model.slug === id))
+    .filter((index) => index >= 0);
+  selectModelIndexes(nextSelection);
+
+  if (!activeModels.length && models.length) {
+    showReadyState();
+    showToast("A newly approved model is ready.");
+  }
+}
+
+function startModelRefreshPolling() {
+  if (modelRefreshTimer || !isBackendEnabled()) return;
+
+  modelRefreshTimer = window.setInterval(() => {
+    if (document.hidden) return;
+    refreshHostedModels({ silent: true });
+  }, MODEL_REFRESH_INTERVAL_MS);
+}
+
 function getSelectedModelIndexes() {
   return [...modelSelect.selectedOptions]
     .map((option) => Number(option.value))
@@ -698,8 +767,8 @@ async function loadModel(model, sourceUrl = model.path) {
     }
 
     const statusName = {
-      0: "Downloading",
-      1: "Preparing",
+      0: "Loading",
+      1: "Preparing model",
       2: "Ready"
     };
 
@@ -714,17 +783,20 @@ async function loadModel(model, sourceUrl = model.path) {
       onProgress: (percentComplete, percentCompleteLabel, loaderStatus) => {
         if (loadToken !== activeLoadToken) return;
         const stage = statusName[loaderStatus] || "Loading";
+        const percent = Number.isFinite(percentComplete) ? percentComplete : undefined;
+        const percentLabel = percentCompleteLabel || (Number.isFinite(percent) ? `${Math.round(percent)}%` : "");
         const sizeText = model.size ? ` of ${formatBytes(model.size)}` : "";
-        const progressText = `${stage} ${percentCompleteLabel || `${Math.round(percentComplete)}%`}${sizeText}`;
+        const progressText = `${stage} ${percentLabel}${sizeText}`;
 
         if (sceneVisible) {
           connectionLabel.textContent = loaderStatus === 2
             ? "Live"
-            : `Streaming ${percentCompleteLabel || `${Math.round(percentComplete)}%`}`;
+            : `Loading ${percentLabel}`;
           updateModelInfo(model);
           return;
         }
 
+        setModelLoadProgress(percent);
         markProgress(progressText);
         setStatus(stage, `${model.name} • ${progressText}`, "loading");
       }
@@ -826,25 +898,28 @@ async function loadSelectedHostedModels() {
     });
 
     const statusName = {
-      0: "Downloading",
-      1: "Preparing",
+      0: "Loading",
+      1: "Preparing model",
       2: "Ready"
     };
 
     await viewer.addSplatScenes(sceneOptions, false, (percentComplete, percentCompleteLabel, loaderStatus) => {
       if (loadToken !== activeLoadToken) return;
       const stage = statusName[loaderStatus] || "Loading";
+      const percent = Number.isFinite(percentComplete) ? percentComplete : undefined;
+      const percentLabel = percentCompleteLabel || (Number.isFinite(percent) ? `${Math.round(percent)}%` : "");
       const sizeText = activeModel.size ? ` of ${formatBytes(activeModel.size)}` : "";
-      const progressText = `${stage} ${percentCompleteLabel || `${Math.round(percentComplete)}%`}${sizeText}`;
+      const progressText = `${stage} ${percentLabel}${sizeText}`;
 
       if (sceneVisible) {
         connectionLabel.textContent = loaderStatus === 2
           ? "Live"
-          : `Streaming ${percentCompleteLabel || `${Math.round(percentComplete)}%`}`;
+          : `Loading ${percentLabel}`;
         updateModelInfo(activeModel);
         return;
       }
 
+      setModelLoadProgress(percent);
       markProgress(progressText);
       setStatus(stage, `${activeModel.name} • ${progressText}`, "loading");
     });
@@ -961,6 +1036,7 @@ async function uploadSelectedCloudFile() {
 
     setUploadProgress("Uploaded. Waiting for owner approval.", 100);
     showToast("Model uploaded for approval.");
+    startModelRefreshPolling();
     selectedCloudUploadFile = null;
     if (cloudUploadInput) cloudUploadInput.value = "";
     refreshUploadControls();
@@ -1160,6 +1236,10 @@ window.addEventListener("drop", (event) => {
   if (file) loadLocalFile(file);
 });
 
+window.addEventListener("focus", () => {
+  refreshHostedModels({ silent: true });
+});
+
 applyTheme(window.localStorage.getItem("gaussian-viewer-theme") || "light");
 
 async function startDashboard() {
@@ -1168,6 +1248,7 @@ async function startDashboard() {
     await withTimeout(refreshSession(), 12000, "Session check timed out.");
     models = await withTimeout(loadManifest(), 15000, "Model list check timed out.");
     fillModelSelect();
+    startModelRefreshPolling();
 
     if (!models.length) {
       showEmptyState();
