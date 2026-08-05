@@ -38,9 +38,21 @@ create table if not exists public.share_links (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.access_logs (
+  id uuid primary key default gen_random_uuid(),
+  model_id uuid references public.models(id) on delete set null,
+  viewer_id uuid references auth.users(id) on delete set null,
+  share_token text references public.share_links(token) on delete set null,
+  action text not null check (action in ('owner_view', 'share_view', 'owner_download')),
+  ip text,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+
 alter table public.profiles enable row level security;
 alter table public.models enable row level security;
 alter table public.share_links enable row level security;
+alter table public.access_logs enable row level security;
 
 drop policy if exists "Users can read own profile" on public.profiles;
 create policy "Users can read own profile"
@@ -85,6 +97,18 @@ create policy "Users can create own shares"
 on public.share_links for insert
 to authenticated
 with check (auth.uid() = owner_id);
+
+drop policy if exists "Users can read own model access logs" on public.access_logs;
+create policy "Users can read own model access logs"
+on public.access_logs for select
+to authenticated
+using (
+  exists (
+    select 1 from public.models
+    where models.id = access_logs.model_id
+      and models.owner_id = auth.uid()
+  )
+);
 
 create or replace function public.handle_new_user()
 returns trigger

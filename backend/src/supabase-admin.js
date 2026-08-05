@@ -113,6 +113,15 @@ export async function createSupabaseShare({ token, ownerId, modelIds, expiresAt 
   return data;
 }
 
+export async function createAccessLog(record) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("access_logs")
+    .insert(record);
+
+  if (error) throw error;
+}
+
 export async function getSupabaseShare(token) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase

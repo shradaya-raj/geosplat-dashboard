@@ -4,6 +4,7 @@ import {
   createUploadSession,
   getLoginUrl,
   getLogoutUrl,
+  getOwnerDownloadUrl,
   getSession,
   getUserModels,
   uploadFileToSignedUrl
@@ -39,6 +40,7 @@ const loadSelectedButton = document.querySelector("#load-selected");
 const reloadButton = document.querySelector("#reload-model");
 const frameButton = document.querySelector("#frame-model");
 const pointModeButton = document.querySelector("#point-mode");
+const downloadOriginalButton = document.querySelector("#download-original");
 const localModelButton = document.querySelector("#local-model");
 const fileInput = document.querySelector("#file-input");
 const shareButton = document.querySelector("#share-button");
@@ -70,6 +72,7 @@ let pointModeEnabled = false;
 let activeLoadToken = 0;
 let loadingWatchdog = null;
 let selectedCloudUploadFile = null;
+let currentModelSource = "static";
 
 async function loadViewerLibraries() {
   if (GaussianSplats3D && THREE) return;
@@ -109,6 +112,7 @@ function updateShareUrl(selectedModels) {
   if (!selectedModels?.length || activeObjectUrl) return;
 
   const url = new URL(window.location.href);
+  if (url.searchParams.has("share")) return;
   url.searchParams.delete("model");
   url.searchParams.delete("models");
 
@@ -321,6 +325,7 @@ async function refreshSession() {
     currentSession = browserSession;
     updateAccountUI(currentSession);
     refreshUploadControls();
+    refreshDownloadButton();
     return currentSession;
   }
 
@@ -330,6 +335,7 @@ async function refreshSession() {
   });
   updateAccountUI(currentSession);
   refreshUploadControls();
+  refreshDownloadButton();
   return currentSession;
 }
 
@@ -423,6 +429,23 @@ function updateModelInfo(model = activeModel, frame = lastFrame) {
 
   modelInfo.textContent = infoParts.join(" · ");
   modelInfo.hidden = false;
+  refreshDownloadButton();
+}
+
+function refreshDownloadButton() {
+  if (!downloadOriginalButton) return;
+
+  const canDownload = Boolean(
+    isBackendEnabled()
+    && currentSession.authenticated
+    && activeModels.length === 1
+    && activeModels[0]?.id
+    && !activeModels[0]?.sharedViewOnly
+    && currentModelSource !== "share"
+  );
+
+  downloadOriginalButton.hidden = !canDownload;
+  downloadOriginalButton.disabled = !canDownload;
 }
 
 function setPointMode(enabled) {
@@ -541,6 +564,7 @@ function normalizeManifest(rawManifest) {
         position: model.position,
         rotation: model.rotation,
         scale: model.scale,
+        sharedViewOnly: Boolean(model.sharedViewOnly),
         alphaThreshold: model.alphaThreshold ?? model.splatAlphaRemovalThreshold ?? 0,
         progressiveLoad: model.progressiveLoad ?? progressiveDefault
       };
@@ -619,12 +643,14 @@ async function loadManifest() {
   });
 
   if (userModelsPayload?.models) {
+    currentModelSource = userModelsPayload.source || "api";
     return normalizeManifest(userModelsPayload.models);
   }
 
   try {
     const response = await fetch(APP_CONFIG.staticManifestUrl, { cache: "no-store" });
     if (!response.ok) return [];
+    currentModelSource = "static";
     return normalizeManifest(await response.json());
   } catch {
     return [];
@@ -730,6 +756,8 @@ async function loadModel(model, sourceUrl = model.path) {
       "error"
     );
     showToast(error?.message || "Could not load model");
+  } finally {
+    refreshDownloadButton();
   }
 }
 
@@ -848,6 +876,8 @@ async function loadSelectedHostedModels() {
       "error"
     );
     showToast(error?.message || "Could not load selected blocks");
+  } finally {
+    refreshDownloadButton();
   }
 }
 
@@ -981,6 +1011,30 @@ async function shareDashboard() {
   }
 }
 
+async function downloadOriginalModel() {
+  if (!activeModels.length || activeModels.length !== 1 || activeModels[0]?.sharedViewOnly) {
+    showToast("Download is available only to the model owner.");
+    return;
+  }
+
+  try {
+    const payload = await getOwnerDownloadUrl(activeModels[0].id);
+    if (!payload?.url) throw new Error("Download link was not created.");
+
+    const link = document.createElement("a");
+    link.href = payload.url;
+    link.download = payload.filename || activeModels[0].filename || activeModels[0].name || "model";
+    link.rel = "noreferrer";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    showToast("Owner download link opened.");
+  } catch (error) {
+    console.error(error);
+    showToast(error?.message || "Download is not available.");
+  }
+}
+
 modelSelect.addEventListener("change", () => {
   if (!getSelectedModelIndexes().length) {
     showReadyState();
@@ -1012,6 +1066,7 @@ pointModeButton.addEventListener("click", () => {
   if (!setPointMode(!pointModeEnabled)) showToast("Point mode is not available yet");
 });
 
+downloadOriginalButton?.addEventListener("click", downloadOriginalModel);
 localModelButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => {
   const [file] = fileInput.files;
@@ -1120,8 +1175,21 @@ async function startDashboard() {
     }
 
     const searchParams = new URLSearchParams(window.location.search);
+    const shareToken = searchParams.get("share");
     const requestedModel = searchParams.get("model");
     const requestedModels = searchParams.get("models");
+
+    if (shareToken && currentModelSource === "share") {
+      const sharedIndexes = models.map((_, index) => index);
+      selectModelIndexes(sharedIndexes);
+      if (sharedIndexes.length === 1) {
+        await loadHostedModel(sharedIndexes[0]);
+      } else {
+        await loadSelectedHostedModels();
+      }
+      showToast("Shared model loaded in view-only mode.");
+      return;
+    }
 
     if (!requestedModel && !requestedModels) {
       selectModelIndexes([]);

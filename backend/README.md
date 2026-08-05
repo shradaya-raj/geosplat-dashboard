@@ -47,6 +47,7 @@ R2_SECRET_ACCESS_KEY=
 R2_BUCKET=gaussian-models
 R2_PUBLIC_BASE_URL=
 R2_SIGNED_URL_EXPIRES_SECONDS=3600
+R2_SHARED_SIGNED_URL_EXPIRES_SECONDS=600
 
 OWNER_EMAIL=shradaya.poudel@gallimaps.com
 APPROVAL_EMAIL=shradayarajpoudel@gmail.com
@@ -158,6 +159,10 @@ gaussian-models/
 
 R2 objects should remain private. The backend returns short-lived signed URLs
 only when the user has permission.
+
+Owner model views use the normal signed URL expiry. Shared links use
+`R2_SHARED_SIGNED_URL_EXPIRES_SECONDS`, so shared viewers get shorter view-only
+access and no owner download endpoint.
 
 ## Email approval links
 

@@ -35,7 +35,8 @@ export const config = {
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
     bucket: process.env.R2_BUCKET || "gaussian-models",
     publicBaseUrl: (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/$/, ""),
-    signedUrlExpiresSeconds: Number(process.env.R2_SIGNED_URL_EXPIRES_SECONDS || 3600)
+    signedUrlExpiresSeconds: Number(process.env.R2_SIGNED_URL_EXPIRES_SECONDS || 3600),
+    sharedSignedUrlExpiresSeconds: Number(process.env.R2_SHARED_SIGNED_URL_EXPIRES_SECONDS || 600)
   }
 };
 
@@ -50,6 +51,10 @@ export function validateConfig() {
 
   if (config.r2.signedUrlExpiresSeconds < 60 || config.r2.signedUrlExpiresSeconds > 86400) {
     throw new Error("R2_SIGNED_URL_EXPIRES_SECONDS must be between 60 and 86400 seconds.");
+  }
+
+  if (config.r2.sharedSignedUrlExpiresSeconds < 30 || config.r2.sharedSignedUrlExpiresSeconds > 3600) {
+    throw new Error("R2_SHARED_SIGNED_URL_EXPIRES_SECONDS must be between 30 and 3600 seconds.");
   }
 
   if (!Number.isFinite(config.maxUploadBytes) || config.maxUploadBytes < 1) {

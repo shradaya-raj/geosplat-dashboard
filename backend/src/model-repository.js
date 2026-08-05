@@ -3,6 +3,7 @@ import { config } from "./config.js";
 import { getExtension } from "./r2.js";
 import {
   createModelRecord,
+  createAccessLog,
   createSupabaseShare,
   getSupabaseModelByApprovalToken,
   getSupabaseModelsByIds,
@@ -240,6 +241,25 @@ export async function getModelsOwnedByUser(modelIds, userId) {
     : await getModelsByIds(modelIds);
 
   return models.filter((model) => model.ownerUserId === userId);
+}
+
+export async function getOwnedPublishedModel(modelId, userId) {
+  const [model] = await getModelsOwnedByUser([modelId], userId);
+  if (!model || model.status !== "published") return null;
+  return model;
+}
+
+export async function recordModelAccess({ modelId, viewerId = null, shareToken = null, action, ip, userAgent }) {
+  if (!useSupabase()) return;
+
+  await createAccessLog({
+    model_id: modelId,
+    viewer_id: viewerId,
+    share_token: shareToken,
+    action,
+    ip,
+    user_agent: userAgent
+  });
 }
 
 export async function createModelShare({ modelIds, ownerUserId }) {

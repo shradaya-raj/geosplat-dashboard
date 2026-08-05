@@ -13,12 +13,14 @@ import {
 import {
   createModelShare,
   createUploadingModel,
+  getOwnedPublishedModel,
   getModelsForShare,
   getModelsOwnedByUser,
   getRepositoryMode,
   listPublishedDemoModels,
   listPublishedUserModels,
   markModelUploadComplete,
+  recordModelAccess,
   reviewModelByApprovalToken
 } from "./model-repository.js";
 
@@ -63,11 +65,20 @@ function publicModel(model) {
     alphaThreshold: model.alphaThreshold ?? 0,
     position: model.position,
     rotation: model.rotation,
-    scale: model.scale
+    scale: model.scale,
+    sharedViewOnly: Boolean(model.sharedViewOnly)
   };
 }
 
-async function getModelsFromShare(token) {
+function requestIp(req) {
+  return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "";
+}
+
+function requestUserAgent(req) {
+  return req.get("user-agent") || "";
+}
+
+async function getModelsFromShare(token, req) {
   const models = await getModelsForShare(token);
   const visible = [];
 
@@ -75,11 +86,22 @@ async function getModelsFromShare(token) {
     if (model.r2Key && isR2Configured()) {
       visible.push({
         ...model,
-        path: await createPresignedDownload({ key: model.r2Key })
+        sharedViewOnly: true,
+        path: await createPresignedDownload({
+          key: model.r2Key,
+          expiresIn: config.r2.sharedSignedUrlExpiresSeconds
+        })
       });
+      recordModelAccess({
+        modelId: model.id,
+        shareToken: token,
+        action: "share_view",
+        ip: requestIp(req),
+        userAgent: requestUserAgent(req)
+      }).catch((error) => console.error("Access log failed.", error));
       continue;
     }
-    visible.push(model);
+    visible.push({ ...model, sharedViewOnly: true });
   }
 
   return visible.filter((model) => model.path || model.r2Key);
@@ -125,8 +147,8 @@ export function createRouter() {
     try {
       const shareToken = typeof req.query.share === "string" ? req.query.share : "";
       if (shareToken) {
-        const sharedModels = await getModelsFromShare(shareToken);
-        return res.json({ models: sharedModels.map(publicModel), source: "share" });
+        const sharedModels = await getModelsFromShare(shareToken, req);
+        return res.json({ models: sharedModels.map(publicModel), source: "share", sharedViewOnly: true });
       }
 
       if (req.session?.user) {
@@ -308,6 +330,35 @@ export function createRouter() {
       res.json({
         token: share.token,
         url: frontendUrl(`?share=${share.token}`)
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/api/models/:id/download-original", requireAuth, async (req, res, next) => {
+    try {
+      const model = await getOwnedPublishedModel(req.params.id, req.session.user.id);
+      if (!model) return res.status(404).json({ error: "Published model was not found for this owner." });
+      if (!model.r2Key || !isR2Configured()) return res.status(404).json({ error: "Model file is not available." });
+
+      const downloadUrl = await createPresignedDownload({
+        key: model.r2Key,
+        expiresIn: Math.min(config.r2.signedUrlExpiresSeconds, 3600)
+      });
+
+      recordModelAccess({
+        modelId: model.id,
+        viewerId: req.session.user.id,
+        action: "owner_download",
+        ip: requestIp(req),
+        userAgent: requestUserAgent(req)
+      }).catch((error) => console.error("Access log failed.", error));
+
+      res.json({
+        url: downloadUrl,
+        filename: model.filename,
+        expiresIn: Math.min(config.r2.signedUrlExpiresSeconds, 3600)
       });
     } catch (error) {
       next(error);

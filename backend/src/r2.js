@@ -63,7 +63,7 @@ export async function createPresignedUpload({ key, contentType = "application/oc
   });
 }
 
-export async function createPresignedDownload({ key }) {
+export async function createPresignedDownload({ key, expiresIn = config.r2.signedUrlExpiresSeconds } = {}) {
   if (config.r2.publicBaseUrl) return `${config.r2.publicBaseUrl}/${key}`;
 
   const client = getR2Client();
@@ -73,7 +73,7 @@ export async function createPresignedDownload({ key }) {
   });
 
   return getSignedUrl(client, command, {
-    expiresIn: config.r2.signedUrlExpiresSeconds
+    expiresIn
   });
 }
 

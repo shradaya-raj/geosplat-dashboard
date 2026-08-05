@@ -54,6 +54,10 @@ export async function createModelShare(modelIds) {
   return payload?.url || null;
 }
 
+export async function getOwnerDownloadUrl(modelId) {
+  return apiFetch(`/api/models/${encodeURIComponent(modelId)}/download-original`);
+}
+
 export async function createUploadSession(file) {
   return apiFetch("/api/uploads/session", {
     method: "POST",

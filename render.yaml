@@ -19,6 +19,8 @@ services:
         value: ""
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 3600
+      - key: R2_SHARED_SIGNED_URL_EXPIRES_SECONDS
+        value: 600
       - key: MAX_UPLOAD_BYTES
         value: 107374182400
       - key: FRONTEND_ORIGIN
