@@ -10,7 +10,7 @@
       name="description"
       content="Self-hosted Gaussian splat viewer for PLY, SPLAT, KSPLAT, and SPZ models"
     />
-    <title>Gaussian Viewer</title>
+    <title>Gaussian Viewer — Project Workspace</title>
   </head>
   <body>
     <div id="app">
@@ -19,7 +19,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span>
             <strong>Gaussian Viewer</strong>
-            <small>3D project workspace</small>
+            <small>Spatial project workspace</small>
           </span>
         </a>
 
@@ -44,14 +44,20 @@
         <aside class="side-panel" aria-label="Model controls and details">
           <section class="panel-card intro-card">
             <span class="eyebrow">Project viewer</span>
-            <h1>Load survey blocks as one clean scene.</h1>
+            <h1>Spatial captures, organized beautifully.</h1>
             <p>
-              Projects can contain Gaussian splats, mesh, point cloud, and
-              orthomosaic files. Gaussian blocks load together in the viewer.
+              Upload project blocks, track approval, and open approved Gaussian
+              scenes in a focused review workspace.
             </p>
+            <div class="capability-strip" aria-label="Supported project data">
+              <span>Gaussian</span>
+              <span>Mesh</span>
+              <span>Point cloud</span>
+              <span>Ortho</span>
+            </div>
           </section>
 
-          <section class="panel-card account-card">
+          <section class="panel-card compact-card account-card">
             <div class="section-title">
               <span>Account access</span>
               <small>User workspace</small>
@@ -67,10 +73,10 @@
             </a>
           </section>
 
-          <section class="panel-card">
+          <section class="panel-card project-card">
             <div class="section-title">
               <span>Projects</span>
-              <small>Gaussian blocks</small>
+              <small>Status aware</small>
             </div>
             <label class="select-control">
               <span class="visually-hidden">Projects</span>
@@ -80,7 +86,7 @@
             </label>
 
             <div class="control-grid">
-              <button id="load-selected" class="icon-button button-wide" type="button" disabled>
+              <button id="load-selected" class="icon-button button-wide primary-control" type="button" disabled>
                 Load selected
               </button>
               <button id="reload-model" class="icon-button" type="button" disabled>
@@ -105,15 +111,15 @@
             <input id="file-input" type="file" accept=".ply,.splat,.ksplat,.spz" hidden />
           </section>
 
-          <section class="panel-card">
+          <section class="panel-card compact-card">
             <div class="section-title">
               <span>Scene</span>
               <small>Live status</small>
             </div>
             <div id="model-info" class="model-info" hidden></div>
             <p class="panel-note">
-              Tip: split large areas into aligned blocks. Select one project to
-              load its Gaussian blocks together.
+              Select a ready project to load its Gaussian blocks together. Pending
+              projects remain visible so uploads never feel lost.
             </p>
           </section>
         </aside>
@@ -129,7 +135,7 @@
           </div>
 
           <div id="empty-panel" class="empty-panel" hidden>
-            <span class="empty-icon" aria-hidden="true">GS</span>
+            <span class="empty-icon" aria-hidden="true">✦</span>
             <div class="empty-copy">
               <strong>No projects yet.</strong>
               <p>
@@ -140,7 +146,7 @@
           </div>
 
           <div id="ready-panel" class="empty-panel" hidden>
-            <span class="empty-icon" aria-hidden="true">GS</span>
+            <span class="empty-icon" aria-hidden="true">✦</span>
             <div class="empty-copy">
               <strong>Projects are ready.</strong>
               <p>
@@ -158,9 +164,9 @@
             <button id="close-upload-panel" class="close-button" type="button" aria-label="Close upload guide">
               &times;
             </button>
-            <span class="empty-icon" aria-hidden="true">UP</span>
-            <div class="empty-copy">
-              <strong>Upload a project.</strong>
+            <span class="empty-icon" aria-hidden="true">↑</span>
+            <div class="empty-copy upload-copy">
+              <strong>Upload a project</strong>
               <p>
                 Name the project, choose the data type, then add one or more
                 files. Uploads stay private until the owner approves them.
