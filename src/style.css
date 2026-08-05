@@ -133,6 +133,8 @@ a {
 }
 
 .topbar {
+  position: relative;
+  z-index: 20;
   flex: 0 0 76px;
   margin: 12px clamp(12px, 2vw, 24px) 0;
   padding: 12px 14px;
@@ -305,10 +307,12 @@ html[data-state="error"] .live-dot {
 
 .profile-menu {
   position: absolute;
-  z-index: 8;
-  top: calc(100% + 10px);
+  z-index: 40;
+  top: calc(100% + 14px);
   right: 0;
   width: min(320px, calc(100vw - 28px));
+  max-height: min(420px, calc(100vh - 112px));
+  overflow: auto;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -409,7 +413,7 @@ html[data-state="error"] .live-dot {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 2px 2px 4px;
+  padding: 0 2px 4px;
 }
 
 .side-panel::-webkit-scrollbar {
@@ -451,6 +455,10 @@ html[data-state="error"] .live-dot {
     radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--accent) 32%, transparent), transparent 42%),
     radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--accent-2) 20%, transparent), transparent 44%),
     color-mix(in srgb, var(--panel-strong) 96%, transparent);
+}
+
+.project-card {
+  min-height: 0;
 }
 
 .eyebrow {
