@@ -275,6 +275,87 @@ html[data-state="error"] .live-dot {
   font-size: 16px;
 }
 
+.profile-menu-wrap {
+  position: relative;
+}
+
+.profile-button {
+  position: relative;
+}
+
+.profile-button::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid color-mix(in srgb, var(--panel-solid) 80%, transparent);
+  border-radius: 50%;
+  background: var(--subtle);
+}
+
+.profile-button[data-state="signed-in"]::after {
+  background: var(--accent-2);
+}
+
+.profile-button[data-state="offline"]::after {
+  background: #f7b955;
+}
+
+.profile-menu {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(320px, calc(100vw - 28px));
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
+  backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+}
+
+.profile-menu[hidden] {
+  display: none;
+}
+
+.profile-menu-header {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.profile-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent-2) 72%, #ffffff));
+  font-size: 20px;
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--accent-2) 18%, transparent);
+}
+
+.profile-menu-header strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.profile-menu-header small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .button-primary,
 .primary-control {
   color: var(--accent-ink);
@@ -329,15 +410,6 @@ html[data-state="error"] .live-dot {
   flex-direction: column;
   gap: 14px;
   padding: 2px 2px 4px;
-}
-
-.account-panel {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
 }
 
 .side-panel::-webkit-scrollbar {
@@ -505,26 +577,6 @@ html[data-state="error"] .live-dot {
   background: color-mix(in srgb, var(--button-soft) 80%, transparent);
   color: var(--muted);
   font-size: 12px;
-}
-
-.account-status {
-  display: grid;
-  gap: 6px;
-  padding: 13px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--button-soft) 78%, transparent);
-}
-
-.account-status span {
-  color: var(--ink);
-  font-weight: 850;
-}
-
-.account-status small {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .model-info strong {

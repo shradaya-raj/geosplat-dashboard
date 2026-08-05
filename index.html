@@ -39,6 +39,23 @@
             <span aria-hidden="true">↑</span>
             <span class="action-label">Upload</span>
           </button>
+          <div class="profile-menu-wrap">
+            <button id="profile-menu-button" class="button button-secondary icon-only profile-button" type="button" aria-label="Open profile menu" aria-expanded="false" title="Profile">
+              <span aria-hidden="true">👤</span>
+            </button>
+            <div id="profile-menu" class="profile-menu" hidden>
+              <div class="profile-menu-header">
+                <span class="profile-avatar" aria-hidden="true">👤</span>
+                <div>
+                  <strong id="account-status">Static viewer mode</strong>
+                  <small id="account-hint">
+                    Connect Supabase Auth and R2 storage to show only each user's own models.
+                  </small>
+                </div>
+              </div>
+              <a id="account-action" class="button button-secondary button-full" href="#" hidden>Sign in</a>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -58,14 +75,6 @@
               <span>Ortho</span>
             </div>
           </section>
-
-          <div id="account-panel" class="account-panel" aria-live="polite">
-            <span id="account-status">Static viewer mode</span>
-            <small id="account-hint">
-              Connect Supabase Auth and R2 storage to show only each user's own models.
-            </small>
-            <a id="account-action" href="#" hidden>Sign in</a>
-          </div>
 
           <section class="panel-card project-card">
             <div class="section-title">

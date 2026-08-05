@@ -62,6 +62,8 @@ const fileInput = document.querySelector("#file-input");
 const shareButton = document.querySelector("#share-button");
 const themeToggle = document.querySelector("#theme-toggle");
 const uploadHelpButton = document.querySelector("#upload-help-button");
+const profileMenuButton = document.querySelector("#profile-menu-button");
+const profileMenu = document.querySelector("#profile-menu");
 const uploadPanel = document.querySelector("#upload-panel");
 const closeUploadPanel = document.querySelector("#close-upload-panel");
 const cloudUploadInput = document.querySelector("#cloud-upload-input");
@@ -249,6 +251,7 @@ function updateAccountUI(session = currentSession) {
     accountAction.href = "#backend-setup";
     accountAction.textContent = "Backend setup pending";
     accountAction.setAttribute("aria-disabled", "true");
+    if (profileMenuButton) profileMenuButton.dataset.state = "offline";
     return;
   }
 
@@ -261,6 +264,11 @@ function updateAccountUI(session = currentSession) {
     accountAction.textContent = "Sign out";
     accountAction.dataset.action = "sign-out";
     accountAction.removeAttribute("aria-disabled");
+    if (profileMenuButton) {
+      profileMenuButton.dataset.state = "signed-in";
+      profileMenuButton.title = email;
+      profileMenuButton.setAttribute("aria-label", `Profile: ${email}`);
+    }
     return;
   }
 
@@ -278,10 +286,18 @@ function updateAccountUI(session = currentSession) {
   } else {
     accountAction.setAttribute("aria-disabled", "true");
   }
+  if (profileMenuButton) {
+    profileMenuButton.dataset.state = "signed-out";
+    profileMenuButton.title = "Sign in";
+    profileMenuButton.setAttribute("aria-label", "Open profile menu");
+  }
 }
 
 function showUploadPanel() {
   uploadPanel.hidden = false;
+  if (isBackendEnabled() && !currentSession.authenticated) {
+    showToast("Sign in from the profile icon before uploading.");
+  }
   refreshUploadControls();
 }
 
@@ -302,6 +318,7 @@ async function handleAccountAction() {
       await signOut();
       await refreshSession();
       showToast("Signed out");
+      hideProfileMenu();
       return true;
     }
 
@@ -322,17 +339,22 @@ async function handleAccountAction() {
   }
 }
 
-async function handleUploadProjectAction() {
-  await refreshSession();
+function showProfileMenu() {
+  if (!profileMenu || !profileMenuButton) return;
+  profileMenu.hidden = false;
+  profileMenuButton.setAttribute("aria-expanded", "true");
+}
 
-  if (!currentSession.authenticated) {
-    showToast("Sign in first, then upload your project.");
-    const signedIn = await handleAccountAction();
-    if (!signedIn) return;
-    await refreshSession();
-  }
+function hideProfileMenu() {
+  if (!profileMenu || !profileMenuButton) return;
+  profileMenu.hidden = true;
+  profileMenuButton.setAttribute("aria-expanded", "false");
+}
 
-  if (currentSession.authenticated) showUploadPanel();
+function toggleProfileMenu() {
+  if (!profileMenu) return;
+  if (profileMenu.hidden) showProfileMenu();
+  else hideProfileMenu();
 }
 
 function isSupportedModelFile(file) {
@@ -1361,6 +1383,13 @@ fileInput.addEventListener("change", () => {
 });
 
 shareButton.addEventListener("click", shareDashboard);
+profileMenuButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleProfileMenu();
+});
+profileMenu?.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
 accountAction?.addEventListener("click", async (event) => {
   event.preventDefault();
   await handleAccountAction();
@@ -1369,7 +1398,7 @@ themeToggle?.addEventListener("click", () => {
   const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   applyTheme(nextTheme);
 });
-uploadHelpButton.addEventListener("click", handleUploadProjectAction);
+uploadHelpButton.addEventListener("click", showUploadPanel);
 closeUploadPanel.addEventListener("click", hideUploadPanel);
 cloudUploadInput?.addEventListener("change", () => {
   selectedCloudUploadFiles = [...cloudUploadInput.files];
@@ -1423,6 +1452,17 @@ window.addEventListener("drop", (event) => {
 
 window.addEventListener("focus", () => {
   refreshHostedModels({ silent: true });
+});
+
+window.addEventListener("click", () => {
+  hideProfileMenu();
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    hideProfileMenu();
+    hideUploadPanel();
+  }
 });
 
 applyTheme(window.localStorage.getItem("gaussian-viewer-theme") || "light");
