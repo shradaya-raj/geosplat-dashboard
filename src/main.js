@@ -631,6 +631,17 @@ async function loadManifest() {
   }
 }
 
+function withTimeout(promise, milliseconds, message) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), milliseconds);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+}
+
 async function loadModel(model, sourceUrl = model.path) {
   activeModel = model;
   activeModels = [model];
@@ -1097,49 +1108,57 @@ window.addEventListener("drop", (event) => {
 applyTheme(window.localStorage.getItem("gaussian-viewer-theme") || "light");
 
 async function startDashboard() {
-  showLoading("Preparing viewer", "Looking for self-hosted models...");
-  await refreshSession();
-  models = await loadManifest();
-  fillModelSelect();
+  try {
+    showLoading("Preparing viewer", "Looking for self-hosted models...");
+    await withTimeout(refreshSession(), 12000, "Session check timed out.");
+    models = await withTimeout(loadManifest(), 15000, "Model list check timed out.");
+    fillModelSelect();
 
-  if (!models.length) {
+    if (!models.length) {
+      showEmptyState();
+      return;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const requestedModel = searchParams.get("model");
+    const requestedModels = searchParams.get("models");
+
+    if (!requestedModel && !requestedModels) {
+      selectModelIndexes([]);
+      showReadyState();
+      return;
+    }
+
+    const requestedSlugs = requestedModels
+      ? requestedModels.split(",").map((value) => value.trim()).filter(Boolean)
+      : [requestedModel];
+
+    const requestedIndexes = requestedSlugs
+      .map((requestedSlug) => models.findIndex((model) => {
+        const slug = model.slug || slugify(model.name);
+        return slug === requestedSlug || model.name === requestedSlug;
+      }))
+      .filter((index) => index >= 0);
+
+    if (!requestedIndexes.length) {
+      selectModelIndexes([]);
+      showReadyState();
+      showToast("Shared model was not found.");
+      return;
+    }
+
+    selectModelIndexes(requestedIndexes);
+    if (requestedIndexes.length === 1) {
+      await loadHostedModel(requestedIndexes[0]);
+    } else {
+      await loadSelectedHostedModels();
+    }
+  } catch (error) {
+    console.error(error);
+    models = [];
+    fillModelSelect();
     showEmptyState();
-    return;
-  }
-
-  const searchParams = new URLSearchParams(window.location.search);
-  const requestedModel = searchParams.get("model");
-  const requestedModels = searchParams.get("models");
-
-  if (!requestedModel && !requestedModels) {
-    selectModelIndexes([]);
-    showReadyState();
-    return;
-  }
-
-  const requestedSlugs = requestedModels
-    ? requestedModels.split(",").map((value) => value.trim()).filter(Boolean)
-    : [requestedModel];
-
-  const requestedIndexes = requestedSlugs
-    .map((requestedSlug) => models.findIndex((model) => {
-      const slug = model.slug || slugify(model.name);
-      return slug === requestedSlug || model.name === requestedSlug;
-    }))
-    .filter((index) => index >= 0);
-
-  if (!requestedIndexes.length) {
-    selectModelIndexes([]);
-    showReadyState();
-    showToast("Shared model was not found.");
-    return;
-  }
-
-  selectModelIndexes(requestedIndexes);
-  if (requestedIndexes.length === 1) {
-    await loadHostedModel(requestedIndexes[0]);
-  } else {
-    await loadSelectedHostedModels();
+    showToast(error?.message || "Could not finish startup check.");
   }
 }
 
