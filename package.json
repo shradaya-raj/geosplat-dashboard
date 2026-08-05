@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
+    "check": "npm run build",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "@mkkellogg/gaussian-splats-3d": "^0.4.7"
+    "@mkkellogg/gaussian-splats-3d": "^0.4.7",
+    "@supabase/supabase-js": "^2.112.0"
   },
   "devDependencies": {
     "vite": "latest"

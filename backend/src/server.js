@@ -2,8 +2,10 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import session from "express-session";
-import { config, isProduction } from "./config.js";
+import { config, isProduction, validateConfig } from "./config.js";
 import { createRouter } from "./routes.js";
+
+validateConfig();
 
 const app = express();
 
@@ -18,7 +20,7 @@ app.use(cors({
   origin: config.frontendOrigin,
   credentials: true,
   methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Accept"]
+  allowedHeaders: ["Content-Type", "Accept", "Authorization"]
 }));
 
 app.use(express.json({ limit: "2mb" }));

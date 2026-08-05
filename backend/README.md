@@ -50,6 +50,7 @@ R2_SIGNED_URL_EXPIRES_SECONDS=3600
 
 OWNER_EMAIL=shradaya.poudel@gallimaps.com
 DEMO_MODEL_URL=
+MAX_UPLOAD_BYTES=107374182400
 ```
 
 Never commit `.env`.
@@ -129,11 +130,15 @@ Implemented:
 - `GET /api/auth/login` placeholder
 - `GET /api/auth/logout` placeholder
 
+The model repository layer automatically uses Supabase when `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` are configured. If they are empty, it falls back to a
+local JSON file for development only.
+
 Next phase:
 
-- replace placeholder auth with Supabase Auth
-- store model/share records in Supabase instead of the temporary JSON store
+- connect the frontend Supabase login/signup flow
 - add owner/admin approval workflow for `pending -> published`
+- add a browser upload UI that calls the R2 upload endpoints
 
 ## R2 object layout
 

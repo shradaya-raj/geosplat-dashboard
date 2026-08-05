@@ -1,9 +1,45 @@
-export function requireAuth(req, res, next) {
-  if (req.session?.user) return next();
-  return res.status(401).json({
-    authenticated: false,
-    error: "Sign-in is not connected yet. Supabase Auth will provide this session in the next phase."
-  });
+import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase-admin.js";
+
+function getBearerToken(req) {
+  const header = req.get("authorization") || "";
+  const [scheme, token] = header.split(" ");
+  if (scheme?.toLowerCase() !== "bearer" || !token) return "";
+  return token;
+}
+
+async function getSupabaseUserFromRequest(req) {
+  const token = getBearerToken(req);
+  if (!token || !isSupabaseConfigured()) return null;
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) return null;
+
+  return {
+    id: data.user.id,
+    email: data.user.email,
+    fullName: data.user.user_metadata?.full_name || data.user.user_metadata?.name || data.user.email
+  };
+}
+
+export async function requireAuth(req, res, next) {
+  try {
+    if (req.session?.user) return next();
+
+    const user = await getSupabaseUserFromRequest(req);
+    if (user) {
+      req.user = user;
+      req.session.user = user;
+      return next();
+    }
+
+    return res.status(401).json({
+      authenticated: false,
+      error: "Sign in is required."
+    });
+  } catch (error) {
+    return next(error);
+  }
 }
 
 export function authPending(req, res) {
@@ -17,6 +53,6 @@ export function getSessionPayload(req) {
   return {
     authenticated: Boolean(req.session?.user),
     user: req.session?.user || null,
-    mode: "supabase-r2"
+    mode: isSupabaseConfigured() ? "supabase-r2" : "local-development"
   };
 }

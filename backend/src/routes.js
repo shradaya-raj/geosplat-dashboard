@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { nanoid } from "nanoid";
 import { config } from "./config.js";
 import { authPending, getSessionPayload, requireAuth } from "./auth.js";
 import {
@@ -11,13 +10,15 @@ import {
   isR2Configured
 } from "./r2.js";
 import {
-  createShare,
-  getModelsByIds,
-  getShare,
-  listDemoModels,
-  listModelsForUser,
-  upsertModel
-} from "./store.js";
+  createModelShare,
+  createUploadingModel,
+  getModelsForShare,
+  getModelsOwnedByUser,
+  getRepositoryMode,
+  listPublishedDemoModels,
+  listPublishedUserModels,
+  markModelUploadComplete
+} from "./model-repository.js";
 
 function frontendUrl(search = "") {
   const path = config.frontendAppPath.startsWith("/")
@@ -50,15 +51,8 @@ function publicModel(model) {
   };
 }
 
-async function getPublishedModelsForUser(user) {
-  const stored = await listModelsForUser(user.id);
-  return stored.filter((model) => model.status === "published" && (model.path || model.r2Key));
-}
-
 async function getModelsFromShare(token) {
-  const share = await getShare(token);
-  if (!share) return [];
-  const models = await getModelsByIds(share.modelIds);
+  const models = await getModelsForShare(token);
   const visible = [];
 
   for (const model of models) {
@@ -72,7 +66,7 @@ async function getModelsFromShare(token) {
     visible.push(model);
   }
 
-  return visible.filter((model) => model.status === "published" && (model.path || model.r2Key));
+  return visible.filter((model) => model.path || model.r2Key);
 }
 
 async function withSignedModelUrls(models) {
@@ -96,7 +90,12 @@ export function createRouter() {
   const router = Router();
 
   router.get("/health", (req, res) => {
-    res.json({ ok: true, service: "gaussian-viewer-backend" });
+    res.json({
+      ok: true,
+      service: "gaussian-viewer-backend",
+      mode: getRepositoryMode(),
+      r2Configured: isR2Configured()
+    });
   });
 
   router.get("/api/auth/login", authPending);
@@ -115,13 +114,13 @@ export function createRouter() {
       }
 
       if (req.session?.user) {
-        const userModels = await withSignedModelUrls(await getPublishedModelsForUser(req.session.user));
+        const userModels = await withSignedModelUrls(await listPublishedUserModels(req.session.user.id));
         if (userModels.length) {
           return res.json({ models: userModels.map(publicModel), source: "user" });
         }
       }
 
-      const demoModels = await listDemoModels();
+      const demoModels = await withSignedModelUrls(await listPublishedDemoModels());
       if (demoModels.length) {
         return res.json({ models: demoModels.map(publicModel), source: "demo" });
       }
@@ -157,6 +156,12 @@ export function createRouter() {
       const extension = extensionOf(filename);
 
       if (!extension) return res.status(400).json({ error: "Unsupported Gaussian model file type." });
+      if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ error: "File size is required." });
+      if (size > config.maxUploadBytes) {
+        return res.status(413).json({
+          error: `File is larger than the configured upload limit of ${Math.round(config.maxUploadBytes / 1024 / 1024 / 1024)} GB.`
+        });
+      }
 
       if (!isR2Configured()) {
         return res.status(501).json({ error: "Cloudflare R2 storage is not configured." });
@@ -168,17 +173,11 @@ export function createRouter() {
         stage: "original"
       });
       const uploadUrl = await createPresignedUpload({ key, contentType });
-      const model = await upsertModel({
-        id: `r2_${nanoid(14)}`,
-        name: filename,
+      const model = await createUploadingModel({
+        user: req.session.user,
         filename,
         size,
-        ownerUserId: req.session.user.id,
-        ownerEmail: req.session.user.email,
-        r2Key: key,
-        status: "uploading",
-        source: "r2-original",
-        progressiveLoad: extension !== ".ply"
+        r2Key: key
       });
 
       return res.json({
@@ -204,17 +203,13 @@ export function createRouter() {
       if (!modelId || !r2Key) return res.status(400).json({ error: "Missing R2 upload details." });
 
       const info = await getObjectInfo(r2Key);
-      const record = await upsertModel({
-        id: modelId,
-        name: req.body?.name || info.key.split("/").pop(),
-        filename: req.body?.filename || info.key.split("/").pop(),
-        size: info.size,
-        ownerUserId: req.session.user.id,
-        ownerEmail: req.session.user.email,
+      const record = await markModelUploadComplete({
+        modelId,
+        user: req.session.user,
         r2Key,
-        status: "pending",
-        source: "r2-original",
-        progressiveLoad: extensionOf(info.key) !== ".ply"
+        objectInfo: info,
+        name: req.body?.name,
+        filename: req.body?.filename
       });
 
       return res.json({
@@ -232,13 +227,13 @@ export function createRouter() {
       const modelIds = Array.isArray(req.body?.modelIds) ? req.body.modelIds.filter(Boolean) : [];
       if (!modelIds.length) return res.status(400).json({ error: "Select a model first." });
 
-      const models = await getModelsByIds(modelIds);
+      const models = await getModelsOwnedByUser(modelIds, req.session.user.id);
       const allowed = models.length === modelIds.length
-        && models.every((model) => model.ownerUserId === req.session.user.id && model.status === "published");
+        && models.every((model) => model.status === "published");
 
       if (!allowed) return res.status(403).json({ error: "You can only share your own published models." });
 
-      const share = await createShare({ modelIds, ownerUserId: req.session.user.id });
+      const share = await createModelShare({ modelIds, ownerUserId: req.session.user.id });
       res.json({
         token: share.token,
         url: frontendUrl(`?share=${share.token}`)

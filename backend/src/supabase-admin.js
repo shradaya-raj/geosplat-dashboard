@@ -56,12 +56,16 @@ export async function createModelRecord(record) {
   return data;
 }
 
-export async function updateModelRecord(id, patch) {
+export async function updateModelRecord(id, patch, ownerId = null) {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+  let query = supabase
     .from("models")
     .update(patch)
-    .eq("id", id)
+    .eq("id", id);
+
+  if (ownerId) query = query.eq("owner_id", ownerId);
+
+  const { data, error } = await query
     .select("*")
     .single();
 

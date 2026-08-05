@@ -15,6 +15,7 @@ export const config = {
   sessionSecret: required("SESSION_SECRET", "dev-only-change-me"),
   ownerEmail: required("OWNER_EMAIL", "shradaya.poudel@gallimaps.com"),
   demoModelUrl: process.env.DEMO_MODEL_URL || "",
+  maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 100 * 1024 * 1024 * 1024),
   storage: {
     provider: process.env.STORAGE_PROVIDER || "r2"
   },
@@ -35,4 +36,18 @@ export const config = {
 
 export function isProduction() {
   return config.nodeEnv === "production";
+}
+
+export function validateConfig() {
+  if (isProduction() && config.sessionSecret === "dev-only-change-me") {
+    throw new Error("SESSION_SECRET must be changed before running in production.");
+  }
+
+  if (config.r2.signedUrlExpiresSeconds < 60 || config.r2.signedUrlExpiresSeconds > 86400) {
+    throw new Error("R2_SIGNED_URL_EXPIRES_SECONDS must be between 60 and 86400 seconds.");
+  }
+
+  if (!Number.isFinite(config.maxUploadBytes) || config.maxUploadBytes < 1) {
+    throw new Error("MAX_UPLOAD_BYTES must be a positive number.");
+  }
 }

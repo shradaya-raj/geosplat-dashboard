@@ -1,7 +1,21 @@
-import * as GaussianSplats3D from "@mkkellogg/gaussian-splats-3d";
-import * as THREE from "three";
-import { createModelShare, getLoginUrl, getLogoutUrl, getSession, getUserModels } from "./api.js";
-import { APP_CONFIG, isBackendEnabled } from "./config.js";
+import {
+  completeUploadSession,
+  createModelShare,
+  createUploadSession,
+  getLoginUrl,
+  getLogoutUrl,
+  getSession,
+  getUserModels,
+  uploadFileToSignedUrl
+} from "./api.js";
+import {
+  getBrowserSession,
+  signInWithEmail,
+  signInWithPassword,
+  signOut,
+  signUpWithPassword
+} from "./auth-client.js";
+import { APP_CONFIG, isBackendEnabled, isSupabaseAuthEnabled } from "./config.js";
 import "./style.css";
 
 const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat", ".spz"];
@@ -9,12 +23,9 @@ const MAX_LOCAL_PREVIEW_BYTES = 350 * 1024 * 1024;
 const MAX_LOCAL_PLY_PREVIEW_BYTES = 150 * 1024 * 1024;
 const LARGE_HOSTED_MODEL_BYTES = 125 * 1024 * 1024;
 const STALLED_LOAD_WARNING_MS = 45000;
-const SCENE_FORMAT_BY_EXTENSION = {
-  ".ply": GaussianSplats3D.SceneFormat.Ply,
-  ".splat": GaussianSplats3D.SceneFormat.Splat,
-  ".ksplat": GaussianSplats3D.SceneFormat.KSplat,
-  ".spz": GaussianSplats3D.SceneFormat.Spz
-};
+let GaussianSplats3D;
+let THREE;
+let sceneFormatByExtension = {};
 
 const connectionLabel = document.querySelector("#connection-label");
 const loadingPanel = document.querySelector("#loading-panel");
@@ -35,6 +46,12 @@ const themeToggle = document.querySelector("#theme-toggle");
 const uploadHelpButton = document.querySelector("#upload-help-button");
 const uploadPanel = document.querySelector("#upload-panel");
 const closeUploadPanel = document.querySelector("#close-upload-panel");
+const cloudUploadInput = document.querySelector("#cloud-upload-input");
+const cloudUploadButton = document.querySelector("#cloud-upload-button");
+const uploadProgress = document.querySelector("#upload-progress");
+const uploadFileName = document.querySelector("#upload-file-name");
+const uploadProgressBar = document.querySelector("#upload-progress-bar");
+const uploadProgressLabel = document.querySelector("#upload-progress-label");
 const toast = document.querySelector("#toast");
 const dropZone = document.querySelector("#drop-zone");
 const modelInfo = document.querySelector("#model-info");
@@ -52,6 +69,23 @@ let lastFrame = null;
 let pointModeEnabled = false;
 let activeLoadToken = 0;
 let loadingWatchdog = null;
+let selectedCloudUploadFile = null;
+
+async function loadViewerLibraries() {
+  if (GaussianSplats3D && THREE) return;
+
+  [GaussianSplats3D, THREE] = await Promise.all([
+    import("@mkkellogg/gaussian-splats-3d"),
+    import("three")
+  ]);
+
+  sceneFormatByExtension = {
+    ".ply": GaussianSplats3D.SceneFormat.Ply,
+    ".splat": GaussianSplats3D.SceneFormat.Splat,
+    ".ksplat": GaussianSplats3D.SceneFormat.KSplat,
+    ".spz": GaussianSplats3D.SceneFormat.Spz
+  };
+}
 
 function applyTheme(theme) {
   const normalizedTheme = theme === "dark" ? "dark" : "light";
@@ -182,29 +216,121 @@ function updateAccountUI(session = currentSession) {
     const email = session.user?.email || session.user?.name || "Signed in user";
     accountStatus.textContent = email;
     accountHint.textContent = "Only models assigned to this account will appear below.";
-    const logoutUrl = getLogoutUrl();
-    accountAction.hidden = !logoutUrl;
-    accountAction.href = logoutUrl || "#";
+    accountAction.hidden = false;
+    accountAction.href = getLogoutUrl() || "#";
     accountAction.textContent = "Sign out";
+    accountAction.dataset.action = "sign-out";
     accountAction.removeAttribute("aria-disabled");
     return;
   }
 
   accountStatus.textContent = "Not signed in";
-  accountHint.textContent = "Sign in to view your private model workspace. Demo model is shown without login.";
+  accountHint.textContent = isSupabaseAuthEnabled()
+    ? "Sign in with email to view your private model workspace."
+    : "Add Supabase URL and anon key to enable real sign in.";
   const loginUrl = getLoginUrl();
-  accountAction.hidden = !loginUrl;
+  accountAction.hidden = false;
   accountAction.href = loginUrl || "#";
   accountAction.textContent = "Sign in";
-  accountAction.removeAttribute("aria-disabled");
+  accountAction.dataset.action = "sign-in";
+  if (isSupabaseAuthEnabled()) {
+    accountAction.removeAttribute("aria-disabled");
+  } else {
+    accountAction.setAttribute("aria-disabled", "true");
+  }
 }
 
 function showUploadPanel() {
   uploadPanel.hidden = false;
+  refreshUploadControls();
 }
 
 function hideUploadPanel() {
   uploadPanel.hidden = true;
+}
+
+function isSupportedModelFile(file) {
+  if (!file?.name) return false;
+  const lowerName = file.name.toLowerCase();
+  return SUPPORTED_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
+}
+
+function setUploadProgress(label, percent = 0) {
+  if (!uploadProgress || !uploadProgressBar || !uploadProgressLabel) return;
+
+  uploadProgress.hidden = false;
+  uploadProgressBar.value = Math.max(0, Math.min(100, percent));
+  uploadProgressLabel.textContent = label;
+}
+
+function refreshUploadControls() {
+  if (!cloudUploadButton) return;
+
+  const canUpload = Boolean(
+    isBackendEnabled()
+    && currentSession.authenticated
+    && selectedCloudUploadFile
+  );
+
+  cloudUploadButton.disabled = !canUpload;
+
+  if (uploadFileName) {
+    uploadFileName.textContent = selectedCloudUploadFile
+      ? `${selectedCloudUploadFile.name} (${formatBytes(selectedCloudUploadFile.size)})`
+      : "No file selected";
+  }
+}
+
+async function promptForPasswordAuth(mode) {
+  const email = window.prompt(`Enter email for ${mode}:`);
+  if (!email) return false;
+
+  const password = window.prompt("Enter password, minimum 6 characters:");
+  if (!password) return false;
+
+  if (mode === "sign up") {
+    await signUpWithPassword(email.trim(), password);
+    showToast("Account created. If email confirmation is enabled, check your inbox once.");
+  } else {
+    await signInWithPassword(email.trim(), password);
+    showToast("Signed in");
+  }
+
+  await refreshSession();
+  models = await loadManifest();
+  fillModelSelect();
+  return true;
+}
+
+async function promptForMagicLink() {
+  const email = window.prompt("Enter your email for a secure sign-in link:");
+  if (!email) return false;
+
+  await signInWithEmail(email.trim());
+  showToast("Check your email for the sign-in link.");
+  return true;
+}
+
+async function refreshSession() {
+  const browserSession = await getBrowserSession().catch((error) => {
+    console.warn("Supabase browser session unavailable.", error);
+    return null;
+  });
+
+  if (browserSession) {
+    currentSession = browserSession;
+    updateAccountUI(currentSession);
+    refreshUploadControls();
+    return currentSession;
+  }
+
+  currentSession = await getSession().catch((error) => {
+    console.warn("Session API unavailable; using static viewer mode.", error);
+    return { authenticated: false, user: null, mode: "static" };
+  });
+  updateAccountUI(currentSession);
+  refreshUploadControls();
+  return currentSession;
 }
 
 function showLoading(title, detail) {
@@ -250,6 +376,10 @@ function cleanObjectUrl() {
 }
 
 function resetViewer() {
+  if (!GaussianSplats3D) {
+    throw new Error("3D viewer library is not loaded yet.");
+  }
+
   if (viewer) {
     viewer.dispose();
     viewer = null;
@@ -437,7 +567,7 @@ function getSceneFormat(model) {
   }
 
   const extension = getExtensionFromPath(model.filename || model.path || "");
-  return extension ? SCENE_FORMAT_BY_EXTENSION[extension] : undefined;
+  return extension ? sceneFormatByExtension[extension] : undefined;
 }
 
 function fillModelSelect() {
@@ -513,6 +643,7 @@ async function loadModel(model, sourceUrl = model.path) {
   const markProgress = startLoadingWatchdog(model, loadToken);
 
   try {
+    await loadViewerLibraries();
     resetViewer();
     frameButton.disabled = false;
     pointModeButton.disabled = true;
@@ -631,6 +762,7 @@ async function loadSelectedHostedModels() {
   const markProgress = startLoadingWatchdog(activeModel, loadToken);
 
   try {
+    await loadViewerLibraries();
     resetViewer();
     frameButton.disabled = false;
     pointModeButton.disabled = true;
@@ -740,6 +872,66 @@ async function loadLocalFile(file) {
   );
 }
 
+async function uploadSelectedCloudFile() {
+  if (!selectedCloudUploadFile) {
+    showToast("Choose a model file first.");
+    return;
+  }
+
+  if (!isSupportedModelFile(selectedCloudUploadFile)) {
+    showToast("Use .ply, .splat, .ksplat, or .spz");
+    return;
+  }
+
+  if (!isBackendEnabled()) {
+    showToast("Backend API is required for cloud uploads.");
+    return;
+  }
+
+  await refreshSession();
+  if (!currentSession.authenticated) {
+    showToast("Sign in before uploading.");
+    return;
+  }
+
+  cloudUploadButton.disabled = true;
+  setUploadProgress("Creating secure upload session...", 1);
+
+  try {
+    const uploadSession = await createUploadSession(selectedCloudUploadFile);
+    if (!uploadSession?.uploadUrl || !uploadSession?.modelId || !uploadSession?.key) {
+      throw new Error("Upload session was not created.");
+    }
+
+    setUploadProgress("Uploading to secure storage...", 2);
+    await uploadFileToSignedUrl({
+      file: selectedCloudUploadFile,
+      uploadUrl: uploadSession.uploadUrl,
+      headers: uploadSession.headers,
+      onProgress: (percent) => setUploadProgress(`Uploading ${percent}%`, percent)
+    });
+
+    setUploadProgress("Finalizing upload record...", 98);
+    await completeUploadSession({
+      modelId: uploadSession.modelId,
+      key: uploadSession.key,
+      file: selectedCloudUploadFile
+    });
+
+    setUploadProgress("Uploaded. Waiting for owner approval.", 100);
+    showToast("Model uploaded for approval.");
+    selectedCloudUploadFile = null;
+    if (cloudUploadInput) cloudUploadInput.value = "";
+    refreshUploadControls();
+  } catch (error) {
+    console.error(error);
+    setUploadProgress(error?.message || "Upload failed", 0);
+    showToast(error?.message || "Upload failed");
+  } finally {
+    refreshUploadControls();
+  }
+}
+
 async function shareDashboard() {
   let shareUrl = getShareUrl();
   if (!shareUrl) {
@@ -817,10 +1009,46 @@ fileInput.addEventListener("change", () => {
 });
 
 shareButton.addEventListener("click", shareDashboard);
-accountAction?.addEventListener("click", (event) => {
-  if (accountAction.getAttribute("aria-disabled") !== "true") return;
+accountAction?.addEventListener("click", async (event) => {
   event.preventDefault();
-  showToast("Sign in needs the backend API connected first.");
+
+  if (accountAction.getAttribute("aria-disabled") === "true") {
+    showToast("Connect Supabase Auth and backend API first.");
+    return;
+  }
+
+  try {
+    if (accountAction.dataset.action === "sign-out") {
+      await signOut();
+      await refreshSession();
+      showToast("Signed out");
+      return;
+    }
+
+    const choice = window.prompt(
+      "Type one option:\n1 = sign in with password\n2 = create account with password\n3 = magic link email"
+    );
+
+    if (choice === "1") {
+      await promptForPasswordAuth("sign in");
+      return;
+    }
+
+    if (choice === "2") {
+      await promptForPasswordAuth("sign up");
+      return;
+    }
+
+    if (choice === "3") {
+      await promptForMagicLink();
+      return;
+    }
+
+    showToast("Sign-in cancelled.");
+  } catch (error) {
+    console.error(error);
+    showToast(error?.message || "Sign-in failed");
+  }
 });
 themeToggle?.addEventListener("click", () => {
   const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -828,6 +1056,19 @@ themeToggle?.addEventListener("click", () => {
 });
 uploadHelpButton.addEventListener("click", showUploadPanel);
 closeUploadPanel.addEventListener("click", hideUploadPanel);
+cloudUploadInput?.addEventListener("change", () => {
+  const [file] = cloudUploadInput.files;
+  selectedCloudUploadFile = file || null;
+
+  if (selectedCloudUploadFile && !isSupportedModelFile(selectedCloudUploadFile)) {
+    showToast("Use .ply, .splat, .ksplat, or .spz");
+    selectedCloudUploadFile = null;
+    cloudUploadInput.value = "";
+  }
+
+  refreshUploadControls();
+});
+cloudUploadButton?.addEventListener("click", uploadSelectedCloudFile);
 uploadPanel.addEventListener("click", (event) => {
   if (event.target === uploadPanel) hideUploadPanel();
 });
@@ -857,11 +1098,7 @@ applyTheme(window.localStorage.getItem("gaussian-viewer-theme") || "light");
 
 async function startDashboard() {
   showLoading("Preparing viewer", "Looking for self-hosted models...");
-  currentSession = await getSession().catch((error) => {
-    console.warn("Session API unavailable; using static viewer mode.", error);
-    return { authenticated: false, user: null, mode: "static" };
-  });
-  updateAccountUI(currentSession);
+  await refreshSession();
   models = await loadManifest();
   fillModelSelect();
 

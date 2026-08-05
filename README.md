@@ -136,6 +136,8 @@ Frontend environment:
 
 ```text
 VITE_GV_API_BASE_URL=https://api.yourdomain.com
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-public-anon-key
 VITE_GV_OWNER_EMAIL=shradaya.poudel@gallimaps.com
 ```
 
@@ -145,11 +147,85 @@ Backend code and setup steps live in:
 backend/
 ```
 
+When the frontend and backend environment variables are configured, users can
+sign in with a Supabase magic link, upload model files directly to Cloudflare R2
+through a signed URL, and wait for owner approval before the model appears in
+their hosted list.
+
 ## Publish through GitHub Pages
 
 1. Push this folder to the `main` branch.
 2. Open **Settings -> Pages** and select **GitHub Actions** as the source.
 3. Push to `main`, or run **Deploy dashboard to GitHub Pages** from Actions.
+
+## Host uploads from any device
+
+GitHub Pages can host the frontend, but uploads need the backend API online.
+Recommended first deployment:
+
+```text
+Frontend: GitHub Pages
+Backend: Render Web Service
+Auth/database: Supabase
+Large model files: Cloudflare R2
+```
+
+### 1. Deploy backend on Render
+
+The repository includes `render.yaml`. Create a Render Blueprint/Web Service
+from this GitHub repository. Render should use:
+
+```text
+Root directory: backend
+Build command: npm ci
+Start command: npm start
+Health check: /health
+```
+
+Add these Render environment variables:
+
+```text
+NODE_ENV=production
+FRONTEND_ORIGIN=https://shradaya-raj.github.io
+FRONTEND_APP_PATH=/geosplat-dashboard/
+BACKEND_BASE_URL=https://your-render-service.onrender.com
+SESSION_SECRET=generate-a-long-random-secret
+
+SUPABASE_URL=https://juxqaenivgwutpnuxogo.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+
+CLOUDFLARE_ACCOUNT_ID=your-cloudflare-account-id
+R2_ACCESS_KEY_ID=your-r2-access-key-id
+R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+R2_BUCKET=gaussian-models
+R2_PUBLIC_BASE_URL=
+R2_SIGNED_URL_EXPIRES_SECONDS=3600
+MAX_UPLOAD_BYTES=107374182400
+
+OWNER_EMAIL=shradaya.poudel@gallimaps.com
+```
+
+Keep `R2_PUBLIC_BASE_URL` empty for private signed download URLs.
+
+### 2. Rebuild GitHub Pages with backend values
+
+In GitHub, open:
+
+```text
+Repository -> Settings -> Secrets and variables -> Actions -> Variables
+```
+
+Add:
+
+```text
+VITE_GV_API_BASE_URL=https://your-render-service.onrender.com
+VITE_SUPABASE_URL=https://juxqaenivgwutpnuxogo.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+VITE_GV_OWNER_EMAIL=shradaya.poudel@gallimaps.com
+```
+
+Then push to `main` or manually rerun the GitHub Pages workflow.
 
 ## Hosting and security notes
 

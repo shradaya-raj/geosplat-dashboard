@@ -31,6 +31,11 @@ jobs:
         run: npm ci
 
       - name: Build dashboard
+        env:
+          VITE_GV_API_BASE_URL: ${{ vars.VITE_GV_API_BASE_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_GV_OWNER_EMAIL: ${{ vars.VITE_GV_OWNER_EMAIL }}
         run: npm run build
 
       - name: Add hosted models from GitHub Release

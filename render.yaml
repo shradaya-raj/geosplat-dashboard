@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: gaussian-viewer-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: STORAGE_PROVIDER
+        value: r2
+      - key: R2_BUCKET
+        value: gaussian-models
+      - key: R2_PUBLIC_BASE_URL
+        value: ""
+      - key: R2_SIGNED_URL_EXPIRES_SECONDS
+        value: 3600
+      - key: MAX_UPLOAD_BYTES
+        value: 107374182400
+      - key: FRONTEND_ORIGIN
+        value: https://shradaya-raj.github.io
+      - key: FRONTEND_APP_PATH
+        value: /geosplat-dashboard/
+      - key: OWNER_EMAIL
+        value: shradaya.poudel@gallimaps.com

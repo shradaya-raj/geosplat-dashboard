@@ -1,7 +1,9 @@
 import { APP_CONFIG, isBackendEnabled } from "./config.js";
+import { getAccessToken } from "./auth-client.js";
 
 async function apiFetch(path, options = {}) {
   if (!isBackendEnabled()) return null;
+  const accessToken = await getAccessToken();
 
   const response = await fetch(`${APP_CONFIG.apiBaseUrl}${path}`, {
     credentials: "include",
@@ -10,6 +12,7 @@ async function apiFetch(path, options = {}) {
     headers: {
       Accept: "application/json",
       ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...options.headers
     }
   });
@@ -49,6 +52,58 @@ export async function createModelShare(modelIds) {
   });
 
   return payload?.url || null;
+}
+
+export async function createUploadSession(file) {
+  return apiFetch("/api/uploads/session", {
+    method: "POST",
+    body: JSON.stringify({
+      filename: file.name,
+      size: file.size,
+      contentType: file.type || "application/octet-stream"
+    })
+  });
+}
+
+export async function completeUploadSession({ modelId, key, file }) {
+  return apiFetch("/api/uploads/complete", {
+    method: "POST",
+    body: JSON.stringify({
+      modelId,
+      r2Key: key,
+      name: file.name,
+      filename: file.name
+    })
+  });
+}
+
+export function uploadFileToSignedUrl({ file, uploadUrl, headers = {}, onProgress }) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", uploadUrl);
+
+    for (const [name, value] of Object.entries(headers)) {
+      request.setRequestHeader(name, value);
+    }
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable || !onProgress) return;
+      onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(`Upload failed with status ${request.status}`));
+    };
+
+    request.onerror = () => reject(new Error("Network error while uploading."));
+    request.onabort = () => reject(new Error("Upload was cancelled."));
+    request.send(file);
+  });
 }
 
 export function getLoginUrl() {
