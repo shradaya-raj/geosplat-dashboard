@@ -1,9 +1,8 @@
-import { HeadObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, HeadObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { nanoid } from "nanoid";
 import { config } from "./config.js";
-
-const supportedExtensions = new Set([".ply", ".splat", ".ksplat", ".spz"]);
+import { DEFAULT_ASSET_TYPE, getSupportedExtension } from "./asset-types.js";
 
 export function isR2Configured() {
   return Boolean(
@@ -29,9 +28,8 @@ export function getR2Client() {
   });
 }
 
-export function getExtension(filename = "") {
-  const lower = filename.split("?")[0].split("#")[0].toLowerCase();
-  return [...supportedExtensions].find((extension) => lower.endsWith(extension));
+export function getExtension(filename = "", assetType = DEFAULT_ASSET_TYPE) {
+  return getSupportedExtension(filename, assetType);
 }
 
 export function sanitizeFilename(filename = "") {
@@ -41,13 +39,14 @@ export function sanitizeFilename(filename = "") {
     .slice(0, 180);
 }
 
-export function buildModelKey({ userId, filename, stage = "original" }) {
+export function buildModelKey({ userId, filename, stage = "original", projectId = null, assetType = DEFAULT_ASSET_TYPE }) {
   const safeFilename = sanitizeFilename(filename);
-  const extension = getExtension(safeFilename);
-  if (!extension) throw new Error("Unsupported Gaussian model file type.");
+  const extension = getExtension(safeFilename, assetType);
+  if (!extension) throw new Error("Unsupported file type for the selected data category.");
 
   const prefix = userId ? `users/${userId}` : "demo";
-  return `${prefix}/${stage}/${Date.now()}-${nanoid(10)}-${safeFilename}`;
+  const projectPart = projectId ? `/projects/${projectId}/${assetType}` : "";
+  return `${prefix}${projectPart}/${stage}/${Date.now()}-${nanoid(10)}-${safeFilename}`;
 }
 
 export async function createPresignedUpload({ key, contentType = "application/octet-stream" }) {
@@ -90,6 +89,14 @@ export async function getObjectInfo(key) {
     contentType: result.ContentType,
     updatedAt: result.LastModified?.toISOString()
   };
+}
+
+export async function deleteObject(key) {
+  const client = getR2Client();
+  await client.send(new DeleteObjectCommand({
+    Bucket: config.r2.bucket,
+    Key: key
+  }));
 }
 
 export async function listBucketSample() {

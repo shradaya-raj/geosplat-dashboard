@@ -95,6 +95,9 @@
               <button id="download-original" class="icon-button" type="button" disabled hidden>
                 Export original
               </button>
+              <button id="delete-selected" class="icon-button danger-button" type="button" disabled>
+                Delete selected
+              </button>
               <button id="local-model" class="icon-button" type="button">
                 Open file
               </button>
@@ -186,11 +189,32 @@
                 The production upload flow will store files in Cloudflare R2 and
                 metadata in Supabase.
               </p>
+              <div class="upload-form">
+                <label>
+                  <span>Project name</span>
+                  <input id="upload-project-name" type="text" placeholder="e.g. Patan Block Survey" maxlength="140" />
+                </label>
+                <label>
+                  <span>Data type</span>
+                  <select id="upload-asset-type">
+                    <option value="gaussian_splatting">Gaussian Splatting</option>
+                    <option value="mesh_3d">3D Mesh</option>
+                    <option value="point_cloud">Point Cloud</option>
+                    <option value="orthomosaic">Ortho / Orthomosaic</option>
+                  </select>
+                </label>
+              </div>
               <div class="upload-actions">
                 <label class="button button-primary" for="cloud-upload-input">
-                  Choose cloud upload file
+                  Choose files
                 </label>
-                <input id="cloud-upload-input" type="file" accept=".ply,.splat,.ksplat,.spz" hidden />
+                <input
+                  id="cloud-upload-input"
+                  type="file"
+                  accept=".ply,.splat,.ksplat,.spz,.obj,.fbx,.glb,.gltf,.stl,.dae,.3dm,.zip,.las,.laz,.pcd,.xyz,.pts,.e57,.tif,.tiff,.geotiff,.png,.jpg,.jpeg,.webp,.jp2"
+                  multiple
+                  hidden
+                />
                 <button id="cloud-upload-button" class="button button-primary" type="button" disabled>
                   Upload for approval
                 </button>
@@ -210,15 +234,15 @@
                 </a>
               </div>
               <div id="upload-progress" class="upload-progress" hidden>
-                <span id="upload-file-name">No file selected</span>
+                <span id="upload-file-name">No files selected</span>
                 <progress id="upload-progress-bar" value="0" max="100"></progress>
                 <small id="upload-progress-label">Waiting</small>
               </div>
               <ol class="upload-steps">
-                <li>Sign in, choose a Gaussian model file, then upload it for approval.</li>
-                <li>Supported formats are <code>.ply</code>, <code>.splat</code>, <code>.ksplat</code>, and <code>.spz</code>.</li>
+                <li>Sign in, enter a project name, choose a data type, then select one or more files.</li>
+                <li>Gaussian files can be viewed now. Mesh, point cloud, and ortho files are stored as project assets for the next viewer modules.</li>
                 <li>The browser uploads directly to Cloudflare R2 through a short-lived signed URL.</li>
-                <li>The backend records the model in Supabase as pending review.</li>
+                <li>The backend records every file under the project in Supabase as pending review.</li>
                 <li>The owner processes and approves the model.</li>
                 <li>Refresh this dashboard, select the hosted model, then click Share.</li>
               </ol>

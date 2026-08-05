@@ -6,21 +6,29 @@ import {
   buildModelKey,
   createPresignedDownload,
   createPresignedUpload,
+  deleteObject,
   getExtension,
   getObjectInfo,
   isR2Configured
 } from "./r2.js";
+import { ASSET_TYPES, getAssetTypeLabel, normalizeAssetType } from "./asset-types.js";
 import {
   createModelShare,
   createUploadingModel,
+  deleteOwnedModel,
+  deleteOwnedProject,
+  deleteOwnedProjectAssets,
+  getProjectAssetsForDelete,
   getOwnedPublishedModel,
   getModelsForShare,
   getModelsOwnedByUser,
   getRepositoryMode,
+  listOwnedProjects,
   listPublishedDemoModels,
   listPublishedUserModels,
   markModelUploadComplete,
   recordModelAccess,
+  resolveUploadProject,
   reviewModelByApprovalToken
 } from "./model-repository.js";
 
@@ -58,6 +66,11 @@ function publicModel(model) {
     filename: model.filename,
     size: model.size,
     format: model.format,
+    projectId: model.projectId,
+    projectName: model.projectName,
+    projectSlug: model.projectSlug,
+    assetType: model.assetType,
+    assetTypeLabel: model.assetTypeLabel,
     ownerUserId: model.ownerUserId,
     ownerEmail: model.ownerEmail,
     isDemo: Boolean(model.isDemo),
@@ -68,6 +81,45 @@ function publicModel(model) {
     scale: model.scale,
     sharedViewOnly: Boolean(model.sharedViewOnly)
   };
+}
+
+function publicProject(project) {
+  const assets = Array.isArray(project.assets) ? project.assets : [];
+  return {
+    id: project.id,
+    name: project.name,
+    slug: project.slug,
+    status: project.status,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    assetCounts: Object.fromEntries(
+      Object.keys(ASSET_TYPES).map((assetType) => [
+        assetType,
+        assets.filter((asset) => asset.assetType === assetType).length
+      ])
+    ),
+    assetsByType: Object.fromEntries(
+      Object.entries(ASSET_TYPES).map(([assetType, definition]) => [
+        assetType,
+        {
+          label: definition.label,
+          files: assets
+            .filter((asset) => asset.assetType === assetType)
+            .map(publicModel)
+        }
+      ])
+    )
+  };
+}
+
+async function removeStoredObjects(models) {
+  if (!isR2Configured()) return;
+  for (const model of models) {
+    if (!model?.r2Key) continue;
+    await deleteObject(model.r2Key).catch((error) => {
+      console.error(`R2 delete failed for ${model.r2Key}.`, error);
+    });
+  }
 }
 
 function requestIp(req) {
@@ -186,14 +238,27 @@ export function createRouter() {
     }
   });
 
+  router.get("/api/projects", requireAuth, async (req, res, next) => {
+    try {
+      const projects = await listOwnedProjects(req.session.user.id);
+      res.json({
+        projects: projects.map(publicProject),
+        assetTypes: ASSET_TYPES
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/api/uploads/session", requireAuth, async (req, res, next) => {
     try {
       const filename = String(req.body?.filename || "");
       const size = Number(req.body?.size || 0);
       const contentType = String(req.body?.contentType || "application/octet-stream");
-      const extension = extensionOf(filename);
+      const assetType = normalizeAssetType(String(req.body?.assetType || ""));
+      const extension = getExtension(filename, assetType);
 
-      if (!extension) return res.status(400).json({ error: "Unsupported Gaussian model file type." });
+      if (!extension) return res.status(400).json({ error: `Unsupported ${getAssetTypeLabel(assetType)} file type.` });
       if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ error: "File size is required." });
       if (size > config.maxUploadBytes) {
         return res.status(413).json({
@@ -205,9 +270,16 @@ export function createRouter() {
         return res.status(501).json({ error: "Cloudflare R2 storage is not configured." });
       }
 
+      const project = await resolveUploadProject({
+        user: req.session.user,
+        projectId: req.body?.projectId ? String(req.body.projectId) : null,
+        projectName: String(req.body?.projectName || "")
+      });
       const key = buildModelKey({
         userId: req.session.user.id,
         filename,
+        projectId: project?.id,
+        assetType,
         stage: "original"
       });
       const uploadUrl = await createPresignedUpload({ key, contentType });
@@ -215,7 +287,9 @@ export function createRouter() {
         user: req.session.user,
         filename,
         size,
-        r2Key: key
+        r2Key: key,
+        project,
+        assetType
       });
 
       return res.json({
@@ -224,6 +298,8 @@ export function createRouter() {
         uploadUrl,
         key,
         modelId: model.id,
+        projectId: project?.id || null,
+        assetType,
         headers: {
           "Content-Type": contentType
         },
@@ -359,6 +435,69 @@ export function createRouter() {
         url: downloadUrl,
         filename: model.filename,
         expiresIn: Math.min(config.r2.signedUrlExpiresSeconds, 3600)
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/api/models/:id", requireAuth, async (req, res, next) => {
+    try {
+      const model = await deleteOwnedModel({
+        modelId: req.params.id,
+        ownerId: req.session.user.id
+      });
+
+      if (!model) return res.status(404).json({ error: "File was not found for this owner." });
+      await removeStoredObjects([model]);
+      res.json({ ok: true, deleted: { modelId: model.id, r2Key: model.r2Key } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/api/projects/:id/types/:assetType", requireAuth, async (req, res, next) => {
+    try {
+      const assetType = normalizeAssetType(req.params.assetType);
+      const models = await deleteOwnedProjectAssets({
+        projectId: req.params.id,
+        ownerId: req.session.user.id,
+        assetType
+      });
+
+      await removeStoredObjects(models);
+      res.json({
+        ok: true,
+        deleted: {
+          projectId: req.params.id,
+          assetType,
+          fileCount: models.length
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/api/projects/:id", requireAuth, async (req, res, next) => {
+    try {
+      const models = await getProjectAssetsForDelete({
+        projectId: req.params.id,
+        ownerId: req.session.user.id
+      });
+      const project = await deleteOwnedProject({
+        projectId: req.params.id,
+        ownerId: req.session.user.id
+      });
+
+      if (!project) return res.status(404).json({ error: "Project was not found for this owner." });
+      await removeStoredObjects(models);
+      res.json({
+        ok: true,
+        deleted: {
+          projectId: req.params.id,
+          fileCount: models.length
+        }
       });
     } catch (error) {
       next(error);

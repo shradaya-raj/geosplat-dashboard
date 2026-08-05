@@ -372,6 +372,17 @@ html[data-state="error"] .live-dot {
   grid-column: 1 / -1;
 }
 
+.danger-button {
+  color: #7f1d1d;
+  border-color: color-mix(in srgb, #ef4444 34%, var(--line));
+  background: color-mix(in srgb, #fee2e2 72%, var(--button-soft));
+}
+
+:root[data-theme="dark"] .danger-button {
+  color: #fecaca;
+  background: color-mix(in srgb, #7f1d1d 34%, var(--button-soft));
+}
+
 .model-info {
   display: grid;
   gap: 8px;
@@ -592,6 +603,32 @@ html[data-state="error"] .live-dot {
   margin: 16px 0;
 }
 
+.upload-form {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.upload-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.upload-form input,
+.upload-form select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 13px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel-strong) 82%, transparent);
+  outline: none;
+}
+
 .upload-progress {
   display: grid;
   gap: 8px;
@@ -736,6 +773,10 @@ code {
   .panel-card {
     border-radius: 20px;
     padding: 15px;
+  }
+
+  .upload-form {
+    grid-template-columns: 1fr;
   }
 
   .control-grid,

@@ -84,6 +84,101 @@ export async function getSupabaseModelsByIds(ids) {
   return data || [];
 }
 
+export async function createProjectRecord(record) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("projects")
+    .insert(record)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getProjectForOwner(projectId, ownerId) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", projectId)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+export async function listProjectsForUser(ownerId) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*, models(*)")
+    .eq("owner_id", ownerId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function listModelsForProject({ projectId, ownerId, assetType = null }) {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from("models")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("owner_id", ownerId);
+
+  if (assetType) query = query.eq("asset_type", assetType);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function deleteModelRecord({ modelId, ownerId }) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("models")
+    .delete()
+    .eq("id", modelId)
+    .eq("owner_id", ownerId)
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+export async function deleteModelsForProject({ projectId, ownerId, assetType = null }) {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from("models")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("owner_id", ownerId);
+
+  if (assetType) query = query.eq("asset_type", assetType);
+
+  const { data, error } = await query.select("*");
+  if (error) throw error;
+  return data || [];
+}
+
+export async function deleteProjectRecord({ projectId, ownerId }) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("projects")
+    .delete()
+    .eq("id", projectId)
+    .eq("owner_id", ownerId)
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
 export async function getSupabaseModelByApprovalToken(token) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase

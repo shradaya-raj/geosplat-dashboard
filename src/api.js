@@ -45,6 +45,12 @@ export async function getUserModels() {
   return Array.isArray(payload) ? { models: payload } : payload;
 }
 
+export async function getUserProjects() {
+  const payload = await apiFetch("/api/projects");
+  if (!payload) return null;
+  return payload;
+}
+
 export async function createModelShare(modelIds) {
   const payload = await apiFetch("/api/shares", {
     method: "POST",
@@ -58,13 +64,16 @@ export async function getOwnerDownloadUrl(modelId) {
   return apiFetch(`/api/models/${encodeURIComponent(modelId)}/download-original`);
 }
 
-export async function createUploadSession(file) {
+export async function createUploadSession(file, options = {}) {
   return apiFetch("/api/uploads/session", {
     method: "POST",
     body: JSON.stringify({
       filename: file.name,
       size: file.size,
-      contentType: file.type || "application/octet-stream"
+      contentType: file.type || "application/octet-stream",
+      projectId: options.projectId || null,
+      projectName: options.projectName || "",
+      assetType: options.assetType || "gaussian_splatting"
     })
   });
 }
@@ -107,6 +116,24 @@ export function uploadFileToSignedUrl({ file, uploadUrl, headers = {}, onProgres
     request.onerror = () => reject(new Error("Network error while uploading."));
     request.onabort = () => reject(new Error("Upload was cancelled."));
     request.send(file);
+  });
+}
+
+export async function deleteHostedFile(modelId) {
+  return apiFetch(`/api/models/${encodeURIComponent(modelId)}`, {
+    method: "DELETE"
+  });
+}
+
+export async function deleteHostedProject(projectId) {
+  return apiFetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE"
+  });
+}
+
+export async function deleteHostedProjectType(projectId, assetType) {
+  return apiFetch(`/api/projects/${encodeURIComponent(projectId)}/types/${encodeURIComponent(assetType)}`, {
+    method: "DELETE"
   });
 }
 

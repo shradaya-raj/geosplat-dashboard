@@ -2,6 +2,7 @@ import {
   completeUploadSession,
   createModelShare,
   createUploadSession,
+  deleteHostedFile,
   getLoginUrl,
   getLogoutUrl,
   getOwnerDownloadUrl,
@@ -20,6 +21,18 @@ import { APP_CONFIG, isBackendEnabled, isSupabaseAuthEnabled } from "./config.js
 import "./style.css";
 
 const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat", ".spz"];
+const UPLOAD_EXTENSIONS_BY_TYPE = {
+  mesh_3d: [".obj", ".fbx", ".glb", ".gltf", ".stl", ".dae", ".3dm", ".zip"],
+  gaussian_splatting: [".ply", ".splat", ".ksplat", ".spz"],
+  point_cloud: [".ply", ".las", ".laz", ".pcd", ".xyz", ".pts", ".e57", ".zip"],
+  orthomosaic: [".tif", ".tiff", ".geotiff", ".png", ".jpg", ".jpeg", ".webp", ".jp2", ".zip"]
+};
+const ASSET_TYPE_LABELS = {
+  mesh_3d: "3D Mesh",
+  gaussian_splatting: "Gaussian Splatting",
+  point_cloud: "Point Cloud",
+  orthomosaic: "Ortho / Orthomosaic"
+};
 const MAX_LOCAL_PREVIEW_BYTES = 350 * 1024 * 1024;
 const MAX_LOCAL_PLY_PREVIEW_BYTES = 150 * 1024 * 1024;
 const LARGE_HOSTED_MODEL_BYTES = 125 * 1024 * 1024;
@@ -43,6 +56,7 @@ const reloadButton = document.querySelector("#reload-model");
 const frameButton = document.querySelector("#frame-model");
 const pointModeButton = document.querySelector("#point-mode");
 const downloadOriginalButton = document.querySelector("#download-original");
+const deleteSelectedButton = document.querySelector("#delete-selected");
 const localModelButton = document.querySelector("#local-model");
 const fileInput = document.querySelector("#file-input");
 const shareButton = document.querySelector("#share-button");
@@ -52,6 +66,8 @@ const uploadPanel = document.querySelector("#upload-panel");
 const closeUploadPanel = document.querySelector("#close-upload-panel");
 const cloudUploadInput = document.querySelector("#cloud-upload-input");
 const cloudUploadButton = document.querySelector("#cloud-upload-button");
+const uploadProjectName = document.querySelector("#upload-project-name");
+const uploadAssetType = document.querySelector("#upload-asset-type");
 const uploadProgress = document.querySelector("#upload-progress");
 const uploadFileName = document.querySelector("#upload-file-name");
 const uploadProgressBar = document.querySelector("#upload-progress-bar");
@@ -73,9 +89,10 @@ let lastFrame = null;
 let pointModeEnabled = false;
 let activeLoadToken = 0;
 let loadingWatchdog = null;
-let selectedCloudUploadFile = null;
+let selectedCloudUploadFiles = [];
 let currentModelSource = "static";
 let modelRefreshTimer = null;
+let modelSelectEntries = [];
 
 async function loadViewerLibraries() {
   if (GaussianSplats3D && THREE) return;
@@ -275,6 +292,17 @@ function isSupportedModelFile(file) {
   return SUPPORTED_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
 }
 
+function getSelectedUploadAssetType() {
+  return uploadAssetType?.value || "gaussian_splatting";
+}
+
+function isSupportedAssetUploadFile(file, assetType = getSelectedUploadAssetType()) {
+  if (!file?.name) return false;
+  const lowerName = file.name.toLowerCase();
+  const extensions = UPLOAD_EXTENSIONS_BY_TYPE[assetType] || UPLOAD_EXTENSIONS_BY_TYPE.gaussian_splatting;
+  return extensions.some((extension) => lowerName.endsWith(extension));
+}
+
 function setUploadProgress(label, percent = 0) {
   if (!uploadProgress || !uploadProgressBar || !uploadProgressLabel) return;
 
@@ -289,15 +317,16 @@ function refreshUploadControls() {
   const canUpload = Boolean(
     isBackendEnabled()
     && currentSession.authenticated
-    && selectedCloudUploadFile
+    && selectedCloudUploadFiles.length
   );
 
   cloudUploadButton.disabled = !canUpload;
 
   if (uploadFileName) {
-    uploadFileName.textContent = selectedCloudUploadFile
-      ? `${selectedCloudUploadFile.name} (${formatBytes(selectedCloudUploadFile.size)})`
-      : "No file selected";
+    const totalBytes = selectedCloudUploadFiles.reduce((sum, file) => sum + file.size, 0);
+    uploadFileName.textContent = selectedCloudUploadFiles.length
+      ? `${selectedCloudUploadFiles.length} file${selectedCloudUploadFiles.length === 1 ? "" : "s"} selected (${formatBytes(totalBytes)})`
+      : "No files selected";
   }
 }
 
@@ -571,11 +600,17 @@ function normalizeManifest(rawManifest) {
       return {
         id: model.id || model.modelId || model.slug || slugify(name || path),
         name,
+        displayName: model.projectName ? `${model.projectName} — ${name}` : name,
         slug: model.slug || slugify(name || path),
         path,
         filename,
         size: model.size,
         format: model.format,
+        projectId: model.projectId,
+        projectName: model.projectName,
+        projectSlug: model.projectSlug,
+        assetType: model.assetType || "gaussian_splatting",
+        assetTypeLabel: model.assetTypeLabel || ASSET_TYPE_LABELS[model.assetType] || "Gaussian Splatting",
         ownerId: model.ownerId,
         ownerEmail: model.ownerEmail,
         isDemo: Boolean(model.isDemo || model.demo),
@@ -614,6 +649,7 @@ function getSceneFormat(model) {
 
 function fillModelSelect() {
   modelSelect.replaceChildren();
+  modelSelectEntries = [];
 
   if (!models.length) {
     const option = document.createElement("option");
@@ -624,13 +660,31 @@ function fillModelSelect() {
     reloadButton.disabled = true;
     frameButton.disabled = false;
     pointModeButton.disabled = true;
+    if (deleteSelectedButton) deleteSelectedButton.disabled = true;
     return;
   }
 
+  const grouped = new Map();
   for (const [index, model] of models.entries()) {
+    const key = model.projectId || `model:${model.id || index}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        label: model.projectName || model.name,
+        indexes: [],
+        size: 0
+      });
+    }
+    const entry = grouped.get(key);
+    entry.indexes.push(index);
+    entry.size += Number(model.size || 0);
+  }
+
+  for (const entry of grouped.values()) {
+    modelSelectEntries.push(entry);
     const option = document.createElement("option");
-    option.value = String(index);
-    option.textContent = model.name;
+    option.value = String(modelSelectEntries.length - 1);
+    const fileLabel = entry.indexes.length === 1 ? "1 file" : `${entry.indexes.length} files`;
+    option.textContent = `${entry.label} (${fileLabel})`;
     modelSelect.append(option);
   }
 
@@ -639,6 +693,7 @@ function fillModelSelect() {
   reloadButton.disabled = false;
   frameButton.disabled = false;
   pointModeButton.disabled = true;
+  if (deleteSelectedButton) deleteSelectedButton.disabled = true;
 }
 
 function modelsChanged(nextModels) {
@@ -696,13 +751,16 @@ function startModelRefreshPolling() {
 function getSelectedModelIndexes() {
   return [...modelSelect.selectedOptions]
     .map((option) => Number(option.value))
+    .filter((index) => Number.isInteger(index) && modelSelectEntries[index])
+    .flatMap((entryIndex) => modelSelectEntries[entryIndex].indexes)
     .filter((index) => Number.isInteger(index) && models[index]);
 }
 
 function selectModelIndexes(indexes) {
-  const selected = new Set(indexes.map(String));
+  const selectedIndexes = new Set(indexes);
   for (const option of modelSelect.options) {
-    option.selected = selected.has(option.value);
+    const entry = modelSelectEntries[Number(option.value)];
+    option.selected = Boolean(entry?.indexes.some((index) => selectedIndexes.has(index)));
   }
 }
 
@@ -990,13 +1048,23 @@ async function loadLocalFile(file) {
 }
 
 async function uploadSelectedCloudFile() {
-  if (!selectedCloudUploadFile) {
-    showToast("Choose a model file first.");
+  if (!selectedCloudUploadFiles.length) {
+    showToast("Choose one or more files first.");
     return;
   }
 
-  if (!isSupportedModelFile(selectedCloudUploadFile)) {
-    showToast("Use .ply, .splat, .ksplat, or .spz");
+  const assetType = getSelectedUploadAssetType();
+  const assetLabel = ASSET_TYPE_LABELS[assetType] || "selected data type";
+  const unsupported = selectedCloudUploadFiles.find((file) => !isSupportedAssetUploadFile(file, assetType));
+  if (unsupported) {
+    showToast(`${unsupported.name} is not supported for ${assetLabel}.`);
+    return;
+  }
+
+  const projectName = uploadProjectName?.value?.trim();
+  if (!projectName) {
+    showToast("Add a project name first.");
+    uploadProjectName?.focus();
     return;
   }
 
@@ -1012,33 +1080,52 @@ async function uploadSelectedCloudFile() {
   }
 
   cloudUploadButton.disabled = true;
-  setUploadProgress("Creating secure upload session...", 1);
+  setUploadProgress(`Preparing ${selectedCloudUploadFiles.length} file${selectedCloudUploadFiles.length === 1 ? "" : "s"}...`, 1);
 
   try {
-    const uploadSession = await createUploadSession(selectedCloudUploadFile);
-    if (!uploadSession?.uploadUrl || !uploadSession?.modelId || !uploadSession?.key) {
-      throw new Error("Upload session was not created.");
+    let projectId = null;
+    const totalFiles = selectedCloudUploadFiles.length;
+
+    for (const [fileIndex, file] of selectedCloudUploadFiles.entries()) {
+      const baseProgress = Math.round((fileIndex / totalFiles) * 100);
+      setUploadProgress(`Preparing file ${fileIndex + 1}/${totalFiles}: ${file.name}`, baseProgress);
+
+      const uploadSession = await createUploadSession(file, {
+        projectId,
+        projectName,
+        assetType
+      });
+      if (!uploadSession?.uploadUrl || !uploadSession?.modelId || !uploadSession?.key) {
+        throw new Error("Upload session was not created.");
+      }
+
+      projectId = uploadSession.projectId || projectId;
+
+      await uploadFileToSignedUrl({
+        file,
+        uploadUrl: uploadSession.uploadUrl,
+        headers: uploadSession.headers,
+        onProgress: (percent) => {
+          const fileProgress = percent / totalFiles;
+          setUploadProgress(
+            `Sending file ${fileIndex + 1}/${totalFiles}: ${percent}%`,
+            Math.min(96, baseProgress + fileProgress)
+          );
+        }
+      });
+
+      setUploadProgress(`Finalizing file ${fileIndex + 1}/${totalFiles}...`, Math.min(98, baseProgress + 95 / totalFiles));
+      await completeUploadSession({
+        modelId: uploadSession.modelId,
+        key: uploadSession.key,
+        file
+      });
     }
 
-    setUploadProgress("Uploading to secure storage...", 2);
-    await uploadFileToSignedUrl({
-      file: selectedCloudUploadFile,
-      uploadUrl: uploadSession.uploadUrl,
-      headers: uploadSession.headers,
-      onProgress: (percent) => setUploadProgress(`Uploading ${percent}%`, percent)
-    });
-
-    setUploadProgress("Finalizing upload record...", 98);
-    await completeUploadSession({
-      modelId: uploadSession.modelId,
-      key: uploadSession.key,
-      file: selectedCloudUploadFile
-    });
-
     setUploadProgress("Uploaded. Waiting for owner approval.", 100);
-    showToast("Model uploaded for approval.");
+    showToast(`${selectedCloudUploadFiles.length} file${selectedCloudUploadFiles.length === 1 ? "" : "s"} uploaded for approval.`);
     startModelRefreshPolling();
-    selectedCloudUploadFile = null;
+    selectedCloudUploadFiles = [];
     if (cloudUploadInput) cloudUploadInput.value = "";
     refreshUploadControls();
   } catch (error) {
@@ -1112,7 +1199,55 @@ async function downloadOriginalModel() {
   }
 }
 
+async function deleteSelectedHostedFiles() {
+  const indexes = getSelectedModelIndexes();
+  const selectedModels = indexes.map((index) => models[index]).filter(Boolean);
+
+  if (!selectedModels.length) {
+    showToast("Select one or more hosted files first.");
+    return;
+  }
+
+  if (!currentSession.authenticated || currentModelSource === "share") {
+    showToast("Sign in as the owner before deleting files.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Delete ${selectedModels.length} selected file${selectedModels.length === 1 ? "" : "s"}?\n\nThis removes the database record and the stored R2 object.`
+  );
+  if (!confirmed) return;
+
+  if (deleteSelectedButton) deleteSelectedButton.disabled = true;
+
+  try {
+    for (const model of selectedModels) {
+      await deleteHostedFile(model.id);
+    }
+
+    activeModels = activeModels.filter((model) => !selectedModels.some((deleted) => deleted.id === model.id));
+    if (!activeModels.length) activeModel = null;
+    models = await loadManifest();
+    fillModelSelect();
+    if (!models.length) showEmptyState();
+    else showReadyState();
+    showToast("Selected files were deleted.");
+  } catch (error) {
+    console.error(error);
+    showToast(error?.message || "Delete failed");
+  } finally {
+    refreshDownloadButton();
+    if (deleteSelectedButton) deleteSelectedButton.disabled = !currentSession.authenticated || currentModelSource === "share";
+  }
+}
+
 modelSelect.addEventListener("change", () => {
+  if (deleteSelectedButton) {
+    deleteSelectedButton.disabled = !getSelectedModelIndexes().length
+      || !currentSession.authenticated
+      || currentModelSource === "share";
+  }
+
   if (!getSelectedModelIndexes().length) {
     showReadyState();
   }
@@ -1144,6 +1279,7 @@ pointModeButton.addEventListener("click", () => {
 });
 
 downloadOriginalButton?.addEventListener("click", downloadOriginalModel);
+deleteSelectedButton?.addEventListener("click", deleteSelectedHostedFiles);
 localModelButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => {
   const [file] = fileInput.files;
@@ -1200,15 +1336,27 @@ themeToggle?.addEventListener("click", () => {
 uploadHelpButton.addEventListener("click", showUploadPanel);
 closeUploadPanel.addEventListener("click", hideUploadPanel);
 cloudUploadInput?.addEventListener("change", () => {
-  const [file] = cloudUploadInput.files;
-  selectedCloudUploadFile = file || null;
+  selectedCloudUploadFiles = [...cloudUploadInput.files];
 
-  if (selectedCloudUploadFile && !isSupportedModelFile(selectedCloudUploadFile)) {
-    showToast("Use .ply, .splat, .ksplat, or .spz");
-    selectedCloudUploadFile = null;
+  const assetType = getSelectedUploadAssetType();
+  const unsupported = selectedCloudUploadFiles.find((file) => !isSupportedAssetUploadFile(file, assetType));
+  if (unsupported) {
+    showToast(`${unsupported.name} is not supported for ${ASSET_TYPE_LABELS[assetType]}.`);
+    selectedCloudUploadFiles = [];
     cloudUploadInput.value = "";
   }
 
+  refreshUploadControls();
+});
+uploadAssetType?.addEventListener("change", () => {
+  if (!selectedCloudUploadFiles.length) return;
+  const assetType = getSelectedUploadAssetType();
+  const unsupported = selectedCloudUploadFiles.find((file) => !isSupportedAssetUploadFile(file, assetType));
+  if (unsupported) {
+    showToast(`Selection cleared. ${unsupported.name} does not match ${ASSET_TYPE_LABELS[assetType]}.`);
+    selectedCloudUploadFiles = [];
+    if (cloudUploadInput) cloudUploadInput.value = "";
+  }
   refreshUploadControls();
 });
 cloudUploadButton?.addEventListener("click", uploadSelectedCloudFile);
