@@ -409,9 +409,9 @@ html[data-state="error"] .live-dot {
 
 .side-panel {
   min-height: 0;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 14px;
   padding: 0 2px 4px;
 }
@@ -459,6 +459,9 @@ html[data-state="error"] .live-dot {
 
 .project-card {
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .eyebrow {
@@ -528,11 +531,14 @@ html[data-state="error"] .live-dot {
 
 .select-control {
   display: block;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .select-control select {
   width: 100%;
-  min-height: 190px;
+  height: 100%;
+  min-height: 96px;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -559,6 +565,7 @@ html[data-state="error"] .live-dot {
 }
 
 .control-grid {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 9px;
@@ -942,7 +949,12 @@ code {
 
   .side-panel {
     max-height: none;
+    display: flex;
     overflow: visible;
+  }
+
+  .select-control select {
+    min-height: 150px;
   }
 
   .viewer-card {
