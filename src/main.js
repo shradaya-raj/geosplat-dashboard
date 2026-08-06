@@ -1289,6 +1289,46 @@ function getLoadedSplatCount() {
   return viewer?.getSplatMesh?.()?.getSplatCount?.() ?? 0;
 }
 
+function formatPixelResolution(width, height) {
+  const roundedWidth = Math.round(Number(width) || 0);
+  const roundedHeight = Math.round(Number(height) || 0);
+  if (!roundedWidth || !roundedHeight) return "";
+  return `${roundedWidth.toLocaleString()} x ${roundedHeight.toLocaleString()} px`;
+}
+
+function getOrthoResolutionInfo() {
+  const orthoObjects = loadedOrthoObjects.filter((object) => object?.userData?.isOrthomosaic);
+  if (!orthoObjects.length) return [];
+
+  const sourceResolutions = new Set();
+  const previewResolutions = new Set();
+  for (const object of orthoObjects) {
+    const sourceResolution = formatPixelResolution(
+      object.userData.orthoSourceWidth,
+      object.userData.orthoSourceHeight
+    );
+    const previewResolution = formatPixelResolution(
+      object.userData.orthoPreviewWidth,
+      object.userData.orthoPreviewHeight
+    );
+    if (sourceResolution) sourceResolutions.add(sourceResolution);
+    if (previewResolution) previewResolutions.add(previewResolution);
+  }
+
+  const parts = [];
+  if (sourceResolutions.size === 1) {
+    parts.push(`source ${sourceResolutions.values().next().value}`);
+  } else if (sourceResolutions.size > 1) {
+    parts.push(`${sourceResolutions.size} source resolutions`);
+  }
+  if (previewResolutions.size === 1) {
+    parts.push(`preview ${previewResolutions.values().next().value}`);
+  } else if (previewResolutions.size > 1) {
+    parts.push(`${previewResolutions.size} preview resolutions`);
+  }
+  return parts;
+}
+
 function updateModelInfo(model = activeModel, frame = lastFrame) {
   if (activeViewerAssetType !== "gaussian_splatting") {
     const typeLabel = ASSET_TYPE_LABELS[activeViewerAssetType] || "Data";
@@ -1297,7 +1337,10 @@ function updateModelInfo(model = activeModel, frame = lastFrame) {
       typeLabel
     ];
     if (activeModels.length > 1) infoParts.push(`${activeModels.length} files`);
-    if (activeViewerAssetType === "orthomosaic") infoParts.push(`north ${Math.round(orthoNorthDegrees)}°`);
+    if (activeViewerAssetType === "orthomosaic") {
+      infoParts.push(...getOrthoResolutionInfo());
+      infoParts.push("2D pan/zoom");
+    }
     modelInfo.textContent = infoParts.join(" · ");
     modelInfo.hidden = false;
     refreshDownloadButton();
