@@ -999,6 +999,68 @@ html[data-state="error"] .live-dot {
   letter-spacing: 0.12em;
 }
 
+.north-indicator {
+  width: 64px;
+  height: 64px;
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--panel-solid) 92%, transparent) 0 36%, transparent 37%),
+    conic-gradient(
+      from 45deg,
+      color-mix(in srgb, var(--accent) 24%, transparent),
+      color-mix(in srgb, var(--panel-strong) 88%, transparent),
+      color-mix(in srgb, var(--accent-2) 18%, transparent),
+      color-mix(in srgb, var(--panel-strong) 88%, transparent),
+      color-mix(in srgb, var(--accent) 24%, transparent)
+    );
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 9px color-mix(in srgb, var(--panel-strong) 72%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, white 55%, transparent);
+}
+
+.north-indicator:hover {
+  box-shadow:
+    var(--shadow-md),
+    inset 0 0 0 9px color-mix(in srgb, var(--panel-strong) 72%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, white 55%, transparent);
+}
+
+.north-indicator span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 42px;
+}
+
+.north-indicator span::before {
+  content: "";
+  width: 12px;
+  height: 30px;
+  clip-path: polygon(50% 0, 88% 58%, 58% 48%, 50% 100%, 42% 48%, 12% 58%);
+  background: linear-gradient(180deg, #ff5b5b 0 46%, var(--accent-2) 47% 100%);
+  filter: drop-shadow(0 7px 9px color-mix(in srgb, var(--accent) 28%, transparent));
+}
+
+.north-indicator span::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--panel-solid);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.north-indicator strong {
+  top: 8px;
+  bottom: auto;
+  font-size: 10px;
+  font-weight: 900;
+  color: #ff5b5b;
+  text-shadow: 0 1px 0 color-mix(in srgb, white 60%, transparent);
+}
+
 .viewer canvas {
   display: block;
   width: 100% !important;

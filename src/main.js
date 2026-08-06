@@ -852,6 +852,38 @@ function resetViewer() {
   });
 }
 
+function configureGenericControlsForAssetType(assetType = activeViewerAssetType) {
+  if (!genericControls || !THREE) return;
+
+  const isOrtho = assetType === "orthomosaic";
+  genericControls.enableDamping = true;
+  genericControls.dampingFactor = isOrtho ? 0.12 : 0.08;
+  genericControls.enablePan = true;
+  genericControls.enableZoom = true;
+  genericControls.enableRotate = !isOrtho;
+  genericControls.screenSpacePanning = true;
+  genericControls.mouseButtons = isOrtho
+    ? {
+      LEFT: THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    }
+    : {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+  genericControls.touches = isOrtho
+    ? {
+      ONE: THREE.TOUCH.PAN,
+      TWO: THREE.TOUCH.DOLLY_PAN
+    }
+    : {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_PAN
+    };
+}
+
 function setupGenericViewer() {
   disposeGenericViewer();
   viewerElement.replaceChildren();
@@ -873,9 +905,8 @@ function setupGenericViewer() {
   viewerElement.append(genericRenderer.domElement);
 
   genericControls = new OrbitControls(genericCamera, genericRenderer.domElement);
-  genericControls.enableDamping = true;
-  genericControls.dampingFactor = 0.08;
-  genericControls.screenSpacePanning = true;
+  configureGenericControlsForAssetType(activeViewerAssetType);
+  genericRenderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
 
   const ambient = new THREE.HemisphereLight(0xffffff, 0x26352f, 2.2);
   const key = new THREE.DirectionalLight(0xffffff, 2.4);
@@ -919,7 +950,7 @@ function updateNorthIndicator() {
 }
 
 function updateOrthoOrientationUI() {
-  const show = activeViewerAssetType === "orthomosaic";
+  const show = false;
   if (orthoOrientationPanel) orthoOrientationPanel.hidden = !show;
   if (orthoNorthAngleInput) orthoNorthAngleInput.value = String(Math.round(orthoNorthDegrees));
   if (orthoNorthValue) orthoNorthValue.textContent = `${Math.round(orthoNorthDegrees)}°`;
@@ -965,6 +996,7 @@ function fitGenericCameraToScene(assetType = activeViewerAssetType) {
   genericCamera.lookAt(center);
   genericCamera.updateProjectionMatrix();
   genericControls.target.copy(center);
+  configureGenericControlsForAssetType(assetType);
   genericControls.update();
 }
 
@@ -2193,6 +2225,10 @@ async function ensureViewUrlsForModels(selectedModels) {
 
 async function loadGenericDataModels(selectedModels, assetType) {
   activeViewerAssetType = assetType;
+  if (assetType === "orthomosaic") {
+    orthoNorthDegrees = 0;
+    window.localStorage.setItem("gaussian-viewer-ortho-north-degrees", "0");
+  }
   updateOrthoOrientationUI();
   activeModels = selectedModels;
   activeModel = {
