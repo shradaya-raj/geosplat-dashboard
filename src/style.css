@@ -1022,15 +1022,44 @@ html[data-state="error"] .live-dot {
 }
 
 .upload-file-detail-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 7px 10px;
+  padding: 0;
   color: var(--ink);
   background: var(--button-soft);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 850;
   cursor: pointer;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.upload-file-detail-toggle:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent-2) 44%, var(--line));
+}
+
+.toggle-eye {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.upload-file-detail-toggle .toggle-eye-closed {
+  display: none;
+}
+
+.upload-file-detail-toggle[data-expanded="true"] .toggle-eye-open {
+  display: none;
+}
+
+.upload-file-detail-toggle[data-expanded="true"] .toggle-eye-closed {
+  display: block;
 }
 
 .upload-file-detail-toggle[hidden] {

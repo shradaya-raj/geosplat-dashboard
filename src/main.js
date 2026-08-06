@@ -479,7 +479,10 @@ function updateUploadFileSummaries() {
 
     if (toggle) {
       toggle.hidden = files.length === 0;
-      toggle.textContent = detail?.hidden === false ? "Hide files" : "View files";
+      const isExpanded = detail?.hidden === false;
+      toggle.dataset.expanded = String(isExpanded);
+      toggle.setAttribute("aria-expanded", String(isExpanded));
+      toggle.setAttribute("aria-label", `${isExpanded ? "Hide" : "Show"} selected ${ASSET_TYPE_LABELS[assetType]} files`);
     }
 
     if (detail) {
@@ -556,10 +559,12 @@ function refreshUploadControls() {
 
   const { files, totalBytes } = getUploadSelectionSummary();
   selectedCloudUploadFiles = files;
+  const hasProjectName = Boolean(uploadProjectName?.value?.trim());
 
   const canUpload = Boolean(
     isBackendEnabled()
     && currentSession.authenticated
+    && hasProjectName
     && selectedCloudUploadFiles.length
     && getSelectedUploadAssetTypes().length
   );
@@ -1419,13 +1424,20 @@ async function uploadSelectedCloudFile() {
   const { filesByType, files } = getUploadSelectionSummary();
   selectedCloudUploadFiles = files;
 
-  if (!selectedCloudUploadFiles.length) {
-    showToast("Choose one or more files first.");
+  const projectName = uploadProjectName?.value?.trim();
+  if (!projectName) {
+    showToast("Add a project name before submitting for approval.");
+    uploadProjectName?.focus();
     return;
   }
 
   if (!getSelectedUploadAssetTypes().length) {
-    showToast("Choose at least one project data type.");
+    showToast("Select at least one data type for this project.");
+    return;
+  }
+
+  if (!selectedCloudUploadFiles.length) {
+    showToast("Choose at least one file for the selected data type.");
     return;
   }
 
@@ -1436,13 +1448,6 @@ async function uploadSelectedCloudFile() {
       showToast(`${unsupported.name} is not supported for ${assetLabel}.`);
       return;
     }
-  }
-
-  const projectName = uploadProjectName?.value?.trim();
-  if (!projectName) {
-    showToast("Add a project name first.");
-    uploadProjectName?.focus();
-    return;
   }
 
   if (!isBackendEnabled()) {
@@ -1706,6 +1711,7 @@ waitUploadButton?.addEventListener("click", () => {
   showReadyState();
   showToast("Upload can finish approval in the background.");
 });
+uploadProjectName?.addEventListener("input", refreshUploadControls);
 for (const input of uploadFileInputs) {
   input.addEventListener("change", () => {
     const assetType = input.dataset.uploadFileInput;
@@ -1736,7 +1742,10 @@ for (const [assetType, toggle] of uploadFileDetailToggles.entries()) {
     if (!detail) return;
 
     detail.hidden = !detail.hidden;
-    toggle.textContent = detail.hidden ? "View files" : "Hide files";
+    const isExpanded = !detail.hidden;
+    toggle.dataset.expanded = String(isExpanded);
+    toggle.setAttribute("aria-expanded", String(isExpanded));
+    toggle.setAttribute("aria-label", `${isExpanded ? "Hide" : "Show"} selected ${ASSET_TYPE_LABELS[assetType]} files`);
   });
 }
 cloudUploadButton?.addEventListener("click", uploadSelectedCloudFile);
