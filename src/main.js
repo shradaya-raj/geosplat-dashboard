@@ -3,6 +3,7 @@ import {
   createModelShare,
   createUploadSession,
   deleteHostedFile,
+  deleteHostedProject,
   getLoginUrl,
   getLogoutUrl,
   getOwnerDownloadUrl,
@@ -1112,6 +1113,12 @@ function getSelectedModelIndexes() {
     .filter((index) => Number.isInteger(index) && models[index]);
 }
 
+function getSelectedProjectEntries() {
+  return [...modelSelect.selectedOptions]
+    .map((option) => modelSelectEntries[Number(option.value)])
+    .filter(Boolean);
+}
+
 function selectModelIndexes(indexes) {
   const selectedIndexes = new Set(indexes);
   for (const option of modelSelect.options) {
@@ -1597,11 +1604,12 @@ async function downloadOriginalModel() {
 }
 
 async function deleteSelectedHostedFiles() {
+  const selectedEntries = getSelectedProjectEntries();
   const indexes = getSelectedModelIndexes();
   const selectedModels = indexes.map((index) => models[index]).filter(Boolean);
 
-  if (!selectedModels.length) {
-    showToast("Select one or more hosted files first.");
+  if (!selectedEntries.length && !selectedModels.length) {
+    showToast("Select one or more projects first.");
     return;
   }
 
@@ -1610,10 +1618,27 @@ async function deleteSelectedHostedFiles() {
     return;
   }
 
-  const fileLabel = `${selectedModels.length} selected file${selectedModels.length === 1 ? "" : "s"}`;
+  const projectEntries = selectedEntries.filter((entry) => entry.indexes.some((index) => models[index]?.projectId));
+  const standaloneModels = selectedModels.filter((model) => !model.projectId);
+  const projectIds = [...new Set(
+    projectEntries
+      .map((entry) => entry.indexes.map((index) => models[index]?.projectId).find(Boolean))
+      .filter(Boolean)
+  )];
+  const projectNames = projectEntries
+    .map((entry) => entry.label)
+    .filter(Boolean);
+  const fallbackNames = standaloneModels.map((model) => model.name).filter(Boolean);
+  const deleteNames = projectNames.length ? projectNames : fallbackNames;
+  const titleTarget = deleteNames.length === 1
+    ? deleteNames[0]
+    : `${deleteNames.length || selectedModels.length} selected project${(deleteNames.length || selectedModels.length) === 1 ? "" : "s"}`;
+  const messageTarget = deleteNames.length > 1
+    ? `Selected projects: ${deleteNames.slice(0, 4).join(", ")}${deleteNames.length > 4 ? ", ..." : ""}`
+    : "This project and its uploaded files will be permanently removed from your workspace.";
   const confirmed = await showConfirmDialog({
-    title: `Delete ${fileLabel}?`,
-    message: "This will permanently remove the selected upload from your workspace. This action cannot be undone.",
+    title: `Delete ${titleTarget}?`,
+    message: `${messageTarget} This action cannot be undone.`,
     acceptLabel: "Delete",
     danger: true
   });
@@ -1622,7 +1647,11 @@ async function deleteSelectedHostedFiles() {
   if (deleteSelectedButton) deleteSelectedButton.disabled = true;
 
   try {
-    for (const model of selectedModels) {
+    for (const projectId of projectIds) {
+      await deleteHostedProject(projectId);
+    }
+
+    for (const model of standaloneModels) {
       await deleteHostedFile(model.id);
     }
 
