@@ -69,7 +69,6 @@ const profileMenu = document.querySelector("#profile-menu");
 const uploadPanel = document.querySelector("#upload-panel");
 const closeUploadPanel = document.querySelector("#close-upload-panel");
 const cloudUploadButton = document.querySelector("#cloud-upload-button");
-const waitUploadButton = document.querySelector("#wait-upload-button");
 const uploadProjectName = document.querySelector("#upload-project-name");
 const uploadAssetTypeInputs = [...document.querySelectorAll("[data-upload-asset-type]")];
 const uploadFileInputs = [...document.querySelectorAll("[data-upload-file-input]")];
@@ -119,6 +118,7 @@ let currentModelSource = "static";
 let modelRefreshTimer = null;
 let modelSelectEntries = [];
 let notifiedPublishedModelIds = new Set();
+let uploadAwaitingApproval = false;
 
 async function loadViewerLibraries() {
   if (GaussianSplats3D && THREE) return;
@@ -558,6 +558,14 @@ function setUploadProgress(label, percent = 0) {
 function refreshUploadControls() {
   if (!cloudUploadButton) return;
 
+  if (uploadAwaitingApproval) {
+    cloudUploadButton.disabled = false;
+    cloudUploadButton.textContent = "Wait";
+    cloudUploadButton.classList.remove("button-primary");
+    cloudUploadButton.classList.add("button-secondary");
+    return;
+  }
+
   const { files, totalBytes } = getUploadSelectionSummary();
   selectedCloudUploadFiles = files;
   const hasProjectName = Boolean(uploadProjectName?.value?.trim());
@@ -571,6 +579,9 @@ function refreshUploadControls() {
   );
 
   cloudUploadButton.disabled = !canUpload;
+  cloudUploadButton.textContent = "Upload for approval";
+  cloudUploadButton.classList.add("button-primary");
+  cloudUploadButton.classList.remove("button-secondary");
 
   if (uploadFileName) {
     uploadFileName.textContent = selectedCloudUploadFiles.length
@@ -1529,6 +1540,7 @@ async function uploadSelectedCloudFile() {
     startModelRefreshPolling();
     selectedCloudUploadFiles = [];
     selectedUploadFilesByType = new Map();
+    uploadAwaitingApproval = true;
     for (const input of uploadFileInputs) input.value = "";
     updateUploadFileSummaries();
     refreshUploadControls();
@@ -1733,13 +1745,12 @@ themeToggle?.addEventListener("click", () => {
   const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   applyTheme(nextTheme);
 });
-uploadHelpButton.addEventListener("click", showUploadPanel);
-closeUploadPanel.addEventListener("click", hideUploadPanel);
-waitUploadButton?.addEventListener("click", () => {
-  hideUploadPanel();
-  showReadyState();
-  showToast("Upload can finish approval in the background.");
+uploadHelpButton.addEventListener("click", () => {
+  uploadAwaitingApproval = false;
+  refreshUploadControls();
+  showUploadPanel();
 });
+closeUploadPanel.addEventListener("click", hideUploadPanel);
 uploadProjectName?.addEventListener("input", refreshUploadControls);
 for (const input of uploadFileInputs) {
   input.addEventListener("change", () => {
@@ -1777,7 +1788,16 @@ for (const [assetType, toggle] of uploadFileDetailToggles.entries()) {
     toggle.setAttribute("aria-label", `${isExpanded ? "Hide" : "Show"} selected ${ASSET_TYPE_LABELS[assetType]} files`);
   });
 }
-cloudUploadButton?.addEventListener("click", uploadSelectedCloudFile);
+cloudUploadButton?.addEventListener("click", () => {
+  if (uploadAwaitingApproval) {
+    hideUploadPanel();
+    showReadyState();
+    showToast("Upload can finish approval in the background.");
+    return;
+  }
+
+  uploadSelectedCloudFile();
+});
 uploadPanel.addEventListener("click", (event) => {
   if (event.target === uploadPanel) hideUploadPanel();
 });
