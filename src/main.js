@@ -162,6 +162,7 @@ async function loadViewerLibraries() {
 
 async function loadGenericViewerLibraries() {
   if (THREE && OrbitControls && GLTFLoader && OBJLoader && PCDLoader && PLYLoader && STLLoader && TIFFLoader) return;
+  globalThis.log ??= (...args) => console.warn(...args);
 
   const [
     threeModule,
@@ -971,7 +972,12 @@ async function loadOrthoObject(model) {
     throw new Error(`${extension || "This ortho format"} needs tile conversion before browser viewing.`);
   }
 
-  const texture = await new TIFFLoader().loadAsync(modelPathToUrl(model.path));
+  let texture;
+  try {
+    texture = await new TIFFLoader().loadAsync(modelPathToUrl(model.path));
+  } catch (error) {
+    throw new Error(`This GeoTIFF could not be decoded in the browser. ${error?.message || "Convert it to web map tiles or a Cloud Optimized GeoTIFF preview."}`);
+  }
   texture.colorSpace = THREE.SRGBColorSpace;
   const aspect = texture.image?.width && texture.image?.height
     ? texture.image.width / texture.image.height
