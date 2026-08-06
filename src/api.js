@@ -64,6 +64,13 @@ export async function getOwnerDownloadUrl(modelId) {
   return apiFetch(`/api/models/${encodeURIComponent(modelId)}/download-original`);
 }
 
+export async function getViewUrls(modelIds) {
+  return apiFetch("/api/models/view-urls", {
+    method: "POST",
+    body: JSON.stringify({ modelIds })
+  });
+}
+
 export async function createUploadSession(file, options = {}) {
   return apiFetch("/api/uploads/session", {
     method: "POST",

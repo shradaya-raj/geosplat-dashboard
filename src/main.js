@@ -8,6 +8,7 @@ import {
   getSession,
   getUserModels,
   getUserProjects,
+  getViewUrls,
   uploadFileToSignedUrl
 } from "./api.js";
 import {
@@ -136,6 +137,7 @@ let modelRefreshTimer = null;
 let modelSelectEntries = [];
 let loadedProjectEntry = null;
 let activeViewerAssetType = "gaussian_splatting";
+const signedViewUrlCache = new Map();
 let notifiedPublishedModelIds = new Set();
 let uploadAwaitingApproval = false;
 
@@ -1141,7 +1143,8 @@ function normalizeManifest(rawManifest) {
         path,
         filename,
         status: model.status || "published",
-        assetType: normalizedAssetType
+        assetType: normalizedAssetType,
+        needsViewUrl: Boolean(model.needsViewUrl)
       };
 
       return {
@@ -1150,6 +1153,7 @@ function normalizeManifest(rawManifest) {
         displayName: model.projectName ? `${model.projectName} — ${name}` : name,
         slug: model.slug || slugify(name || path),
         path,
+        needsViewUrl: Boolean(model.needsViewUrl),
         filename,
         size: model.size,
         format: model.format,
@@ -1197,7 +1201,7 @@ function getExtensionFromPath(path) {
 }
 
 function isBrowserViewableAsset(model) {
-  if (!model?.path || model.status !== "published") return false;
+  if (!model || model.status !== "published" || (!model.path && !model.needsViewUrl)) return false;
   const assetType = model.assetType || "gaussian_splatting";
   const extension = getFileExtension(model.filename || model.path || "");
   return Boolean((VIEWABLE_EXTENSIONS_BY_TYPE[assetType] || []).includes(extension));
@@ -1750,6 +1754,7 @@ async function loadHostedModel(index) {
   selectModelIndexes([index]);
   loadedProjectEntry = getCombinedSelectedProjectEntry();
   activeViewerAssetType = model.assetType || "gaussian_splatting";
+  await ensureViewUrlsForModels([model]);
   if (activeViewerAssetType === "gaussian_splatting") {
     await loadModel(model, modelPathToUrl(model.path));
   } else {
@@ -1757,6 +1762,37 @@ async function loadHostedModel(index) {
   }
   if (loadedProjectEntry) renderViewerTypeSwitcher(loadedProjectEntry, activeViewerAssetType);
   updateShareUrl(model);
+}
+
+async function ensureViewUrlsForModels(selectedModels) {
+  const missingModels = selectedModels.filter((model) => model?.canLoad && !model.path && model.needsViewUrl);
+  if (!missingModels.length) return selectedModels;
+
+  const missingIds = missingModels
+    .map((model) => model.id)
+    .filter((id) => id && !signedViewUrlCache.has(id));
+
+  if (missingIds.length) {
+    const payload = await getViewUrls(missingIds);
+    for (const signedModel of payload?.models || []) {
+      if (signedModel.id && signedModel.path) signedViewUrlCache.set(signedModel.id, signedModel.path);
+    }
+  }
+
+  for (const model of missingModels) {
+    const signedPath = signedViewUrlCache.get(model.id);
+    if (signedPath) {
+      model.path = signedPath;
+      model.needsViewUrl = false;
+    }
+  }
+
+  const stillMissing = missingModels.filter((model) => !model.path);
+  if (stillMissing.length) {
+    throw new Error(`Could not prepare ${stillMissing.length} selected file${stillMissing.length === 1 ? "" : "s"} for viewing.`);
+  }
+
+  return selectedModels;
 }
 
 async function loadGenericDataModels(selectedModels, assetType) {
@@ -1834,10 +1870,10 @@ async function loadSelectedHostedModels() {
       ? model?.assetType === "gaussian_splatting"
       : model?.assetType === selectedAssetType;
   });
-  const loadableIndexes = typedIndexes.filter((index) => models[index]?.canLoad && models[index]?.path);
+  const loadableIndexes = typedIndexes.filter((index) => models[index]?.canLoad);
   const selectedModels = loadableIndexes
     .map((index) => models[index])
-    .filter((model) => model?.canLoad && model.path);
+    .filter((model) => model?.canLoad);
 
   if (!selectedModels.length) {
     loadedProjectEntry = selectedEntry;
@@ -1860,6 +1896,7 @@ async function loadSelectedHostedModels() {
 
   loadedProjectEntry = selectedEntry;
   activeViewerAssetType = renderAssetType;
+  await ensureViewUrlsForModels(selectedModels);
 
   if (renderAssetType !== "gaussian_splatting") {
     await loadGenericDataModels(selectedModels, renderAssetType);

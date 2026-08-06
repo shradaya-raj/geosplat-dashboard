@@ -99,14 +99,15 @@ function publicModel(model) {
     ownerUserId: model.ownerUserId,
     ownerEmail: model.ownerEmail,
     status: model.status,
-    canLoad: Boolean(model.path && model.status === "published"),
+    canLoad: Boolean((model.path || model.r2Key) && model.status === "published"),
     isDemo: Boolean(model.isDemo),
     progressiveLoad: model.progressiveLoad ?? true,
     alphaThreshold: model.alphaThreshold ?? 0,
     position: model.position,
     rotation: model.rotation,
     scale: model.scale,
-    sharedViewOnly: Boolean(model.sharedViewOnly)
+    sharedViewOnly: Boolean(model.sharedViewOnly),
+    needsViewUrl: Boolean(!model.path && model.r2Key && model.status === "published")
   };
 }
 
@@ -270,19 +271,28 @@ export function createRouter() {
   router.get("/api/projects", requireAuth, async (req, res, next) => {
     try {
       const projects = await listOwnedProjects(req.session.user.id);
-      const signedProjects = [];
-
-      for (const project of projects) {
-        signedProjects.push({
-          ...project,
-          assets: await withSignedModelUrls(project.assets || [])
-        });
-      }
 
       res.json({
-        projects: signedProjects.map(publicProject),
+        projects: projects.map(publicProject),
         assetTypes: ASSET_TYPES
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/api/models/view-urls", requireAuth, async (req, res, next) => {
+    try {
+      const modelIds = Array.isArray(req.body?.modelIds)
+        ? req.body.modelIds.map((id) => String(id)).filter(Boolean).slice(0, 200)
+        : [];
+
+      if (!modelIds.length) return res.json({ models: [] });
+
+      const ownedModels = await getModelsOwnedByUser(modelIds, req.session.user.id);
+      const publishedModels = ownedModels.filter((model) => model.status === "published");
+      const signedModels = await withSignedModelUrls(publishedModels);
+      res.json({ models: signedModels.map(publicModel) });
     } catch (error) {
       next(error);
     }
