@@ -9,6 +9,7 @@ import {
   getUserModels,
   getUserProjects,
   getViewFileArrayBuffer,
+  getViewFileUrl,
   getViewUrls,
   uploadFileToSignedUrl
 } from "./api.js";
@@ -22,9 +23,12 @@ import {
 import { APP_CONFIG, isBackendEnabled, isSupabaseAuthEnabled } from "./config.js";
 import "./style.css";
 
-const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat", ".spz"];
+const SUPPORTED_EXTENSIONS = [".ply", ".splat", ".ksplat", ".spz", ".pcd"];
 const UPLOAD_EXTENSIONS_BY_TYPE = {
-  mesh_3d: [".obj", ".fbx", ".glb", ".gltf", ".stl", ".dae", ".3dm", ".zip"],
+  mesh_3d: [
+    ".obj", ".mtl", ".fbx", ".glb", ".gltf", ".bin", ".stl", ".dae", ".3dm",
+    ".jpg", ".jpeg", ".png", ".webp", ".ktx2", ".bmp", ".tga", ".zip"
+  ],
   gaussian_splatting: [".ply", ".splat", ".ksplat", ".spz"],
   point_cloud: [".ply", ".las", ".laz", ".pcd", ".xyz", ".pts", ".e57", ".zip"],
   orthomosaic: [".tif", ".tiff", ".geotiff", ".tfw", ".prj", ".zip"]
@@ -51,6 +55,7 @@ let GaussianSplats3D;
 let THREE;
 let OrbitControls;
 let GLTFLoader;
+let MTLLoader;
 let OBJLoader;
 let PCDLoader;
 let PLYLoader;
@@ -173,12 +178,13 @@ async function loadViewerLibraries() {
 }
 
 async function loadGenericViewerLibraries() {
-  if (THREE && OrbitControls && GLTFLoader && OBJLoader && PCDLoader && PLYLoader && STLLoader && GeoTIFF) return;
+  if (THREE && OrbitControls && GLTFLoader && MTLLoader && OBJLoader && PCDLoader && PLYLoader && STLLoader && GeoTIFF) return;
 
   const [
     threeModule,
     orbitModule,
     gltfModule,
+    mtlModule,
     objModule,
     pcdModule,
     plyModule,
@@ -188,6 +194,7 @@ async function loadGenericViewerLibraries() {
     import("three"),
     import("three/addons/controls/OrbitControls.js"),
     import("three/addons/loaders/GLTFLoader.js"),
+    import("three/addons/loaders/MTLLoader.js"),
     import("three/addons/loaders/OBJLoader.js"),
     import("three/addons/loaders/PCDLoader.js"),
     import("three/addons/loaders/PLYLoader.js"),
@@ -198,6 +205,7 @@ async function loadGenericViewerLibraries() {
   THREE = threeModule;
   OrbitControls = orbitModule.OrbitControls;
   GLTFLoader = gltfModule.GLTFLoader;
+  MTLLoader = mtlModule.MTLLoader;
   OBJLoader = objModule.OBJLoader;
   PCDLoader = pcdModule.PCDLoader;
   PLYLoader = plyModule.PLYLoader;
@@ -972,16 +980,84 @@ function applyCommonObjectStyle(object, model, index, total) {
   return object;
 }
 
+function getBaseFilename(path = "") {
+  try {
+    return decodeURIComponent(String(path).split("?")[0].split("#")[0].split("/").pop() || "").toLowerCase();
+  } catch {
+    return String(path).split("?")[0].split("#")[0].split("/").pop()?.toLowerCase() || "";
+  }
+}
+
+function getProjectCompanionModels(model, assetType = model?.assetType) {
+  if (!model?.projectId) return [];
+  return models.filter((candidate) => (
+    candidate?.id !== model.id
+    && candidate.projectId === model.projectId
+    && candidate.assetType === assetType
+    && candidate.status === "published"
+  ));
+}
+
+async function createMeshLoadingManager(model) {
+  const companions = getProjectCompanionModels(model, "mesh_3d");
+  if (companions.length) {
+    await ensureViewUrlsForModels(companions);
+  }
+
+  const urlsByFilename = new Map();
+  for (const companion of companions) {
+    const filename = getBaseFilename(companion.filename || companion.name || companion.path || "");
+    if (!filename) continue;
+    const url = companion.path
+      ? modelPathToUrl(companion.path)
+      : getViewFileUrl(companion.id);
+    if (url) urlsByFilename.set(filename, url);
+  }
+
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier((url) => {
+    const filename = getBaseFilename(url);
+    return urlsByFilename.get(filename) || url;
+  });
+  return manager;
+}
+
+function findMatchingMaterialFile(model) {
+  const modelStem = getBaseFilename(model.filename || model.name || "").replace(/\.[a-z0-9]+$/i, "");
+  const companions = getProjectCompanionModels(model, "mesh_3d");
+  return companions.find((candidate) => {
+    const filename = getBaseFilename(candidate.filename || candidate.name || "");
+    if (!filename.endsWith(".mtl")) return false;
+    return !modelStem || filename.replace(/\.mtl$/i, "") === modelStem;
+  }) || companions.find((candidate) => getBaseFilename(candidate.filename || candidate.name || "").endsWith(".mtl"));
+}
+
 async function loadMeshObject(model) {
   const url = modelPathToUrl(model.path);
   const extension = getFileExtension(model.filename || model.path || "");
+  const manager = await createMeshLoadingManager(model);
 
   if (extension === ".glb" || extension === ".gltf") {
-    const result = await new GLTFLoader().loadAsync(url);
+    const result = await new GLTFLoader(manager).loadAsync(url);
     return result.scene;
   }
 
-  if (extension === ".obj") return new OBJLoader().loadAsync(url);
+  if (extension === ".obj") {
+    const objLoader = new OBJLoader(manager);
+    const materialFile = findMatchingMaterialFile(model);
+    if (materialFile) {
+      await ensureViewUrlsForModels([materialFile]);
+      const materialUrl = materialFile.path
+        ? modelPathToUrl(materialFile.path)
+        : getViewFileUrl(materialFile.id);
+      if (materialUrl) {
+        const materials = await new MTLLoader(manager).loadAsync(materialUrl);
+        materials.preload();
+        objLoader.setMaterials(materials);
+      }
+    }
+    return objLoader.loadAsync(url);
+  }
 
   if (extension === ".stl") {
     const geometry = await new STLLoader().loadAsync(url);
@@ -1940,6 +2016,33 @@ function withTimeout(promise, milliseconds, message) {
   });
 }
 
+function startEstimatedProgress({ token, from = 0, to = 95, label = "Loading", markProgress = () => {} } = {}) {
+  let current = Math.max(0, Math.min(100, from));
+  const ceiling = Math.max(current, Math.min(99, to));
+  setModelLoadProgress(current);
+  markProgress(`${label} ${Math.round(current)}%`);
+
+  const timer = window.setInterval(() => {
+    if (token !== activeLoadToken) {
+      window.clearInterval(timer);
+      return;
+    }
+
+    const remaining = ceiling - current;
+    if (remaining <= 0.4) return;
+    current += Math.max(0.25, remaining * 0.08);
+    setModelLoadProgress(current);
+    markProgress(`${label} ${Math.round(current)}%`);
+  }, 450);
+
+  return (finalPercent = ceiling) => {
+    window.clearInterval(timer);
+    current = Math.max(current, Math.min(100, finalPercent));
+    setModelLoadProgress(current);
+    markProgress(`${label} ${Math.round(current)}%`);
+  };
+}
+
 async function loadModel(model, sourceUrl = model.path) {
   activeModel = model;
   activeModels = [model];
@@ -2058,7 +2161,7 @@ async function loadHostedModel(index) {
 }
 
 async function ensureViewUrlsForModels(selectedModels) {
-  const missingModels = selectedModels.filter((model) => model?.canLoad && !model.path && model.needsViewUrl);
+  const missingModels = selectedModels.filter((model) => model?.status === "published" && !model.path && model.needsViewUrl);
   if (!missingModels.length) return selectedModels;
 
   const missingIds = missingModels
@@ -2104,7 +2207,9 @@ async function loadGenericDataModels(selectedModels, assetType) {
   hideEmptyState();
   hideReadyState();
   showLoading(`Loading ${typeLabel}`, `${activeModel.name}${sizeHint}`);
+  setModelLoadProgress(2);
   const markProgress = startLoadingWatchdog(activeModel, loadToken);
+  markProgress("Preparing viewer libraries 2%");
 
   try {
     await loadGenericViewerLibraries();
@@ -2121,11 +2226,24 @@ async function loadGenericDataModels(selectedModels, assetType) {
     for (const [index, model] of selectedModels.entries()) {
       if (loadToken !== activeLoadToken) return;
       const percent = Math.round((index / Math.max(selectedModels.length, 1)) * 100);
+      const nextPercent = Math.round(((index + 1) / Math.max(selectedModels.length, 1)) * 100);
       const detail = `Reading ${index + 1}/${selectedModels.length} • ${model.name}`;
       setModelLoadProgress(percent);
       markProgress(detail);
       setStatus(`Loading ${typeLabel}`, detail, "loading");
-      const object = await loadGenericAssetObject(model, index, selectedModels.length);
+      const stopEstimatedProgress = startEstimatedProgress({
+        token: loadToken,
+        from: percent,
+        to: Math.max(percent, nextPercent - 3),
+        label: detail,
+        markProgress
+      });
+      let object;
+      try {
+        object = await loadGenericAssetObject(model, index, selectedModels.length);
+      } finally {
+        stopEstimatedProgress(nextPercent);
+      }
       genericScene.add(object);
       if (object.userData?.isOrthomosaic) loadedOrthoObjects.push(object);
     }
@@ -2316,7 +2434,7 @@ async function loadLocalFile(file) {
   const lowerName = file.name.toLowerCase();
   const extension = SUPPORTED_EXTENSIONS.find((item) => lowerName.endsWith(item));
   if (!extension) {
-    showToast("Use .ply, .splat, .ksplat, or .spz");
+    showToast("Use .ply, .splat, .ksplat, .spz, or .pcd");
     return;
   }
 
@@ -2334,6 +2452,22 @@ async function loadLocalFile(file) {
   loadedProjectEntry = null;
   hideViewerTypeSwitcher();
   activeObjectUrl = URL.createObjectURL(file);
+  if (extension === ".pcd") {
+    await loadGenericDataModels([
+      {
+        id: `local:${file.name}`,
+        name: file.name,
+        path: activeObjectUrl,
+        filename: file.name,
+        size: file.size,
+        status: "published",
+        canLoad: true,
+        assetType: "point_cloud"
+      }
+    ], "point_cloud");
+    return;
+  }
+
   await loadModel(
     {
       name: file.name,
@@ -2470,7 +2604,13 @@ async function shareDashboard() {
   }
 
   if (isBackendEnabled() && activeModels.length) {
-    const modelIds = activeModels.map((model) => model.id || model.slug).filter(Boolean);
+    const shareModels = activeViewerAssetType === "mesh_3d"
+      ? [
+        ...activeModels,
+        ...activeModels.flatMap((model) => getProjectCompanionModels(model, "mesh_3d"))
+      ]
+      : activeModels;
+    const modelIds = [...new Set(shareModels.map((model) => model.id || model.slug).filter(Boolean))];
     const privateShareUrl = await createModelShare(modelIds).catch((error) => {
       console.warn("Could not create backend share link.", error);
       return null;
@@ -2668,6 +2808,12 @@ orthoRotateLeftButton?.addEventListener("click", () => {
 });
 
 orthoResetNorthButton?.addEventListener("click", () => {
+  setOrthoNorthDegrees(0);
+  updateModelInfo(activeModel);
+  showToast("Orthomosaic reset to north-up.");
+});
+
+northIndicator?.addEventListener("click", () => {
   setOrthoNorthDegrees(0);
   updateModelInfo(activeModel);
   showToast("Orthomosaic reset to north-up.");

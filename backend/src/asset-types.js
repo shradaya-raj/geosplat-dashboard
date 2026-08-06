@@ -1,7 +1,10 @@
 export const ASSET_TYPES = {
   mesh_3d: {
     label: "3D Mesh",
-    extensions: [".obj", ".fbx", ".glb", ".gltf", ".stl", ".dae", ".3dm", ".zip"],
+    extensions: [
+      ".obj", ".mtl", ".fbx", ".glb", ".gltf", ".bin", ".stl", ".dae", ".3dm",
+      ".jpg", ".jpeg", ".png", ".webp", ".ktx2", ".bmp", ".tga", ".zip"
+    ],
     viewableExtensions: [".obj", ".glb", ".gltf", ".stl"]
   },
   gaussian_splatting: {

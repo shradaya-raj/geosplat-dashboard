@@ -108,6 +108,13 @@ export async function getViewFileArrayBuffer(modelId) {
   return response.arrayBuffer();
 }
 
+export function getViewFileUrl(modelId) {
+  if (!isBackendEnabled() || !modelId) return "";
+  const shareToken = new URLSearchParams(window.location.search).get("share");
+  const query = shareToken ? `?share=${encodeURIComponent(shareToken)}` : "";
+  return `${APP_CONFIG.apiBaseUrl}/api/models/${encodeURIComponent(modelId)}/file${query}`;
+}
+
 export async function createUploadSession(file, options = {}) {
   return apiFetch("/api/uploads/session", {
     method: "POST",

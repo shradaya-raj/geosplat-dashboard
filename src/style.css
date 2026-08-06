@@ -943,6 +943,7 @@ html[data-state="error"] .live-dot {
 }
 
 .north-indicator {
+  appearance: none;
   position: absolute;
   z-index: 5;
   right: 30px;
@@ -951,12 +952,25 @@ html[data-state="error"] .live-dot {
   place-items: center;
   width: 58px;
   height: 58px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 50%;
   color: var(--ink);
   background: color-mix(in srgb, var(--panel-strong) 86%, transparent);
   backdrop-filter: var(--blur);
   box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  font: inherit;
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.north-indicator:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.north-indicator:active {
+  transform: translateY(0) scale(0.97);
 }
 
 .north-indicator[hidden] {
@@ -966,11 +980,16 @@ html[data-state="error"] .live-dot {
 .north-indicator span {
   position: absolute;
   color: var(--accent-2);
-  font-size: 28px;
+  font-size: 0;
   line-height: 1;
   transform: rotate(var(--north-rotation, 0deg));
   transform-origin: center;
   transition: transform 220ms ease;
+}
+
+.north-indicator span::before {
+  content: "↑";
+  font-size: 28px;
 }
 
 .north-indicator strong {

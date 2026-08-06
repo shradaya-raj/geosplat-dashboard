@@ -108,7 +108,7 @@
                 Open file
               </button>
             </div>
-            <input id="file-input" type="file" accept=".ply,.splat,.ksplat,.spz" hidden />
+            <input id="file-input" type="file" accept=".ply,.splat,.ksplat,.spz,.pcd" hidden />
           </section>
 
           <section class="panel-card compact-card">
@@ -143,10 +143,10 @@
         <section class="viewer-card" aria-label="Interactive Gaussian splat viewer">
           <div id="viewer" class="viewer"></div>
           <div id="viewer-type-switcher" class="viewer-type-switcher" hidden aria-label="Loaded data type switcher"></div>
-          <div id="north-indicator" class="north-indicator" hidden aria-label="North orientation">
+          <button id="north-indicator" class="north-indicator" type="button" hidden aria-label="Reset orthomosaic north-up">
             <span aria-hidden="true">↑</span>
             <strong>N</strong>
-          </div>
+          </button>
 
           <div id="loading-panel" class="loading-panel">
             <span class="loader"></span>
@@ -212,7 +212,7 @@
                     <input type="checkbox" value="mesh_3d" data-upload-asset-type />
                     <span>
                       <strong>3D Mesh</strong>
-                      <small>.obj, .fbx, .glb, .gltf, .stl</small>
+                      <small>.obj, .mtl, .glb, .gltf, textures</small>
                     </span>
                   </label>
                   <label class="upload-type-card">
@@ -273,7 +273,7 @@
                     </button>
                   </div>
                   <label class="button button-secondary" for="cloud-upload-input-mesh">Choose files</label>
-                  <input id="cloud-upload-input-mesh" type="file" accept=".obj,.fbx,.glb,.gltf,.stl,.dae,.3dm,.zip" data-upload-file-input="mesh_3d" multiple hidden />
+                  <input id="cloud-upload-input-mesh" type="file" accept=".obj,.mtl,.fbx,.glb,.gltf,.bin,.stl,.dae,.3dm,.jpg,.jpeg,.png,.webp,.ktx2,.bmp,.tga,.zip" data-upload-file-input="mesh_3d" multiple hidden />
                   <div class="upload-file-detail" data-upload-file-detail="mesh_3d" hidden></div>
                 </div>
                 <div class="upload-file-group" data-upload-file-group="point_cloud" hidden>

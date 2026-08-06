@@ -12,7 +12,7 @@ import {
   getObjectStream,
   isR2Configured
 } from "./r2.js";
-import { ASSET_TYPES, getAssetTypeLabel, normalizeAssetType } from "./asset-types.js";
+import { ASSET_TYPES, getAssetTypeLabel, isRenderableAsset, normalizeAssetType } from "./asset-types.js";
 import {
   createModelShare,
   createUploadingModel,
@@ -104,7 +104,7 @@ function publicModel(model) {
     assetType: model.assetType,
     assetTypeLabel: model.assetTypeLabel,
     status: model.status,
-    canLoad: Boolean((model.path || model.r2Key) && model.status === "published"),
+    canLoad: Boolean((model.path || model.r2Key) && model.status === "published" && isRenderableAsset(model.assetType, model.format)),
     isDemo: Boolean(model.isDemo),
     progressiveLoad: model.progressiveLoad ?? true,
     alphaThreshold: model.alphaThreshold ?? 0,
