@@ -4,8 +4,6 @@ import {
   createUploadSession,
   deleteHostedFile,
   deleteHostedProject,
-  getLoginUrl,
-  getLogoutUrl,
   getOwnerDownloadUrl,
   getSession,
   getUserModels,
@@ -294,7 +292,7 @@ function updateAccountUI(session = currentSession) {
     accountStatus.textContent = email;
     accountHint.textContent = "Only models assigned to this account will appear below.";
     accountAction.hidden = false;
-    accountAction.href = getLogoutUrl() || "#";
+    accountAction.href = "#sign-out";
     accountAction.textContent = "Sign out";
     accountAction.dataset.action = "sign-out";
     accountAction.removeAttribute("aria-disabled");
@@ -310,9 +308,8 @@ function updateAccountUI(session = currentSession) {
   accountHint.textContent = isSupabaseAuthEnabled()
     ? "Sign in with email to view your private model workspace."
     : "Connect secure sign-in to enable private workspaces.";
-  const loginUrl = getLoginUrl();
   accountAction.hidden = false;
-  accountAction.href = loginUrl || "#";
+  accountAction.href = "#sign-in";
   accountAction.textContent = "Sign in";
   accountAction.dataset.action = "sign-in";
   if (isSupabaseAuthEnabled()) {
