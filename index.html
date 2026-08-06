@@ -77,6 +77,12 @@
                 <option>No projects</option>
               </select>
             </label>
+            <label class="type-select-control">
+              <span>Data type to view</span>
+              <select id="project-type-select" aria-label="Data type to view" disabled>
+                <option>Choose a project first</option>
+              </select>
+            </label>
 
             <div class="control-grid">
               <button id="load-selected" class="icon-button button-wide primary-control" type="button" disabled>
@@ -119,6 +125,7 @@
 
         <section class="viewer-card" aria-label="Interactive Gaussian splat viewer">
           <div id="viewer" class="viewer"></div>
+          <div id="viewer-type-switcher" class="viewer-type-switcher" hidden aria-label="Loaded data type switcher"></div>
 
           <div id="loading-panel" class="loading-panel">
             <span class="loader"></span>

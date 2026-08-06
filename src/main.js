@@ -51,6 +51,8 @@ const emptyPanel = document.querySelector("#empty-panel");
 const readyPanel = document.querySelector("#ready-panel");
 const viewerElement = document.querySelector("#viewer");
 const modelSelect = document.querySelector("#model-select");
+const projectTypeSelect = document.querySelector("#project-type-select");
+const viewerTypeSwitcher = document.querySelector("#viewer-type-switcher");
 const loadSelectedButton = document.querySelector("#load-selected");
 const reloadButton = document.querySelector("#reload-model");
 const frameButton = document.querySelector("#frame-model");
@@ -115,6 +117,8 @@ let selectedUploadFilesByType = new Map();
 let currentModelSource = "static";
 let modelRefreshTimer = null;
 let modelSelectEntries = [];
+let loadedProjectEntry = null;
+let activeViewerAssetType = "gaussian_splatting";
 let notifiedPublishedModelIds = new Set();
 let uploadAwaitingApproval = false;
 
@@ -670,6 +674,7 @@ function hideLoading() {
 function showEmptyState() {
   readyPanel.hidden = true;
   emptyPanel.hidden = false;
+  hideViewerTypeSwitcher();
   hideLoading();
   setStatus("Ready for files", "Add hosted models or open a local splat.", "ready");
 }
@@ -681,6 +686,7 @@ function hideEmptyState() {
 function showReadyState() {
   emptyPanel.hidden = true;
   readyPanel.hidden = false;
+  if (!activeModels.length) hideViewerTypeSwitcher();
   hideLoading();
   setStatus("Choose project", "Approved Gaussian projects are available.", "ready");
 }
@@ -693,6 +699,23 @@ function cleanObjectUrl() {
   if (!activeObjectUrl) return;
   URL.revokeObjectURL(activeObjectUrl);
   activeObjectUrl = null;
+}
+
+function clearViewerScene() {
+  activeLoadToken += 1;
+  clearLoadingWatchdog();
+  if (viewer) {
+    viewer.dispose();
+    viewer = null;
+  }
+  viewerElement.replaceChildren();
+  activeModels = [];
+  activeModel = null;
+  lastFrame = null;
+  pointModeEnabled = false;
+  frameButton.disabled = false;
+  pointModeButton.disabled = true;
+  refreshDownloadButton();
 }
 
 function resetViewer() {
@@ -1010,6 +1033,137 @@ function getProjectApprovalSummary(entry) {
   return `• Not ready • ${approvedRatio}`;
 }
 
+function getAssetTypeOrder() {
+  return Object.keys(ASSET_TYPE_LABELS);
+}
+
+function getProjectTypeStats(entry) {
+  const stats = new Map();
+
+  for (const assetType of getAssetTypeOrder()) {
+    stats.set(assetType, {
+      assetType,
+      label: ASSET_TYPE_LABELS[assetType] || assetType,
+      total: 0,
+      approved: 0,
+      loadable: 0
+    });
+  }
+
+  for (const index of entry?.indexes || []) {
+    const model = models[index];
+    if (!model) continue;
+    const assetType = model.assetType || "gaussian_splatting";
+    if (!stats.has(assetType)) {
+      stats.set(assetType, {
+        assetType,
+        label: ASSET_TYPE_LABELS[assetType] || assetType,
+        total: 0,
+        approved: 0,
+        loadable: 0
+      });
+    }
+    const item = stats.get(assetType);
+    item.total += 1;
+    if (model.status === "published") item.approved += 1;
+    if (model.canLoad && model.path) item.loadable += 1;
+  }
+
+  return [...stats.values()].filter((item) => item.total > 0);
+}
+
+function getSelectedAssetType() {
+  return projectTypeSelect?.value || "all";
+}
+
+function fillProjectTypeSelect() {
+  if (!projectTypeSelect) return;
+
+  const selectedEntries = getSelectedProjectEntries();
+  projectTypeSelect.replaceChildren();
+
+  if (!selectedEntries.length) {
+    const option = document.createElement("option");
+    option.textContent = "Choose a project first";
+    projectTypeSelect.append(option);
+    projectTypeSelect.disabled = true;
+    return;
+  }
+
+  const previousValue = projectTypeSelect.value;
+  const combined = new Map();
+  for (const entry of selectedEntries) {
+    for (const stat of getProjectTypeStats(entry)) {
+      if (!combined.has(stat.assetType)) {
+        combined.set(stat.assetType, { ...stat, total: 0, approved: 0, loadable: 0 });
+      }
+      const item = combined.get(stat.assetType);
+      item.total += stat.total;
+      item.approved += stat.approved;
+      item.loadable += stat.loadable;
+    }
+  }
+
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = "All viewable Gaussian blocks";
+  projectTypeSelect.append(allOption);
+
+  for (const assetType of getAssetTypeOrder()) {
+    const stat = combined.get(assetType);
+    if (!stat) continue;
+    const option = document.createElement("option");
+    option.value = assetType;
+    option.textContent = `${stat.label} — ${stat.approved}/${stat.total} approved`;
+    projectTypeSelect.append(option);
+  }
+
+  const values = new Set([...projectTypeSelect.options].map((option) => option.value));
+  projectTypeSelect.value = values.has(previousValue)
+    ? previousValue
+    : (values.has("gaussian_splatting") ? "gaussian_splatting" : "all");
+  projectTypeSelect.disabled = false;
+}
+
+function hideViewerTypeSwitcher() {
+  if (!viewerTypeSwitcher) return;
+  viewerTypeSwitcher.hidden = true;
+  viewerTypeSwitcher.replaceChildren();
+}
+
+function renderViewerTypeSwitcher(entry, activeAssetType = "gaussian_splatting") {
+  if (!viewerTypeSwitcher) return;
+  viewerTypeSwitcher.replaceChildren();
+
+  const stats = getProjectTypeStats(entry);
+  if (!stats.length) {
+    hideViewerTypeSwitcher();
+    return;
+  }
+
+  for (const stat of stats) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "viewer-type-pill";
+    button.dataset.assetType = stat.assetType;
+    button.dataset.active = String(stat.assetType === activeAssetType);
+    button.innerHTML = `
+      <span>${stat.label}</span>
+      <small>${stat.approved}/${stat.total}</small>
+    `;
+    button.addEventListener("click", async () => {
+      if (activeViewerAssetType === stat.assetType) return;
+      activeViewerAssetType = stat.assetType;
+      if (projectTypeSelect) projectTypeSelect.value = stat.assetType;
+      renderViewerTypeSwitcher(entry, stat.assetType);
+      await loadSelectedHostedModels();
+    });
+    viewerTypeSwitcher.append(button);
+  }
+
+  viewerTypeSwitcher.hidden = false;
+}
+
 function fillModelSelect() {
   modelSelect.replaceChildren();
   modelSelectEntries = [];
@@ -1024,6 +1178,7 @@ function fillModelSelect() {
     frameButton.disabled = false;
     pointModeButton.disabled = true;
     if (deleteSelectedButton) deleteSelectedButton.disabled = true;
+    fillProjectTypeSelect();
     return;
   }
 
@@ -1060,6 +1215,7 @@ function fillModelSelect() {
   frameButton.disabled = false;
   pointModeButton.disabled = true;
   if (deleteSelectedButton) deleteSelectedButton.disabled = true;
+  fillProjectTypeSelect();
 }
 
 function modelsChanged(nextModels) {
@@ -1133,17 +1289,37 @@ function startModelRefreshPolling() {
 }
 
 function getSelectedModelIndexes() {
+  const selectedAssetType = getSelectedAssetType();
   return [...modelSelect.selectedOptions]
     .map((option) => Number(option.value))
     .filter((index) => Number.isInteger(index) && modelSelectEntries[index])
     .flatMap((entryIndex) => modelSelectEntries[entryIndex].indexes)
-    .filter((index) => Number.isInteger(index) && models[index]);
+    .filter((index) => {
+      const model = models[index];
+      return Number.isInteger(index)
+        && model
+        && (selectedAssetType === "all" || model.assetType === selectedAssetType);
+    });
 }
 
 function getSelectedProjectEntries() {
   return [...modelSelect.selectedOptions]
     .map((option) => modelSelectEntries[Number(option.value)])
     .filter(Boolean);
+}
+
+function getCombinedSelectedProjectEntry() {
+  const entries = getSelectedProjectEntries();
+  if (!entries.length) return null;
+  if (entries.length === 1) return entries[0];
+
+  const indexes = [...new Set(entries.flatMap((entry) => entry.indexes))];
+  return {
+    label: `${entries.length} selected projects`,
+    indexes,
+    totalAssets: entries.reduce((sum, entry) => sum + Number(entry.totalAssets || 0), 0),
+    approvedAssets: entries.reduce((sum, entry) => sum + Number(entry.approvedAssets || 0), 0)
+  };
 }
 
 function selectModelIndexes(indexes) {
@@ -1301,23 +1477,51 @@ async function loadHostedModel(index) {
   const model = models[index];
   if (!model) return;
   selectModelIndexes([index]);
+  loadedProjectEntry = getCombinedSelectedProjectEntry();
+  activeViewerAssetType = model.assetType || "gaussian_splatting";
   await loadModel(model, modelPathToUrl(model.path));
+  if (loadedProjectEntry) renderViewerTypeSwitcher(loadedProjectEntry, activeViewerAssetType);
   updateShareUrl(model);
 }
 
 async function loadSelectedHostedModels() {
   cleanObjectUrl();
+  const selectedEntry = getCombinedSelectedProjectEntry();
+  const selectedAssetType = getSelectedAssetType();
   const indexes = getSelectedModelIndexes();
-  const loadableIndexes = indexes.filter((index) => models[index]?.canLoad && models[index]?.path);
+  const renderAssetType = selectedAssetType === "all" ? "gaussian_splatting" : selectedAssetType;
+  const typedIndexes = indexes.filter((index) => {
+    const model = models[index];
+    return selectedAssetType === "all"
+      ? model?.assetType === "gaussian_splatting"
+      : model?.assetType === selectedAssetType;
+  });
+  const loadableIndexes = typedIndexes.filter((index) => models[index]?.canLoad && models[index]?.path);
   const selectedModels = loadableIndexes
     .map((index) => models[index])
     .filter((model) => model?.canLoad && model.path);
 
   if (!selectedModels.length) {
+    loadedProjectEntry = selectedEntry;
+    activeViewerAssetType = renderAssetType;
+    clearViewerScene();
     showReadyState();
-    showToast("Selected project has no approved Gaussian blocks yet. You can delete it or wait for approval.");
+    if (loadedProjectEntry) renderViewerTypeSwitcher(loadedProjectEntry, activeViewerAssetType);
+    const typeLabel = ASSET_TYPE_LABELS[renderAssetType] || "selected data";
+    const hasTypedFiles = typedIndexes.length > 0;
+    const hasApprovedTypedFiles = typedIndexes.some((index) => models[index]?.status === "published");
+    if (renderAssetType !== "gaussian_splatting" && hasApprovedTypedFiles) {
+      showToast(`${typeLabel} is stored in this project. Viewer support for this type is coming next.`);
+    } else if (hasTypedFiles) {
+      showToast(`${typeLabel} has no approved viewable files yet.`);
+    } else {
+      showToast(`This project has no ${typeLabel} files.`);
+    }
     return;
   }
+
+  loadedProjectEntry = selectedEntry;
+  activeViewerAssetType = renderAssetType;
 
   if (selectedModels.length === 1) {
     await loadHostedModel(loadableIndexes[0]);
@@ -1405,6 +1609,7 @@ async function loadSelectedHostedModels() {
     }, 100);
     setStatus("Live", activeModel.name, "ready");
     updateShareUrl(selectedModels);
+    if (loadedProjectEntry) renderViewerTypeSwitcher(loadedProjectEntry, activeViewerAssetType);
     hideLoading();
   } catch (error) {
     if (loadToken !== activeLoadToken) return;
@@ -1441,6 +1646,8 @@ async function loadLocalFile(file) {
   }
 
   cleanObjectUrl();
+  loadedProjectEntry = null;
+  hideViewerTypeSwitcher();
   activeObjectUrl = URL.createObjectURL(file);
   await loadModel(
     {
@@ -1714,14 +1921,24 @@ async function deleteSelectedHostedFiles() {
 }
 
 modelSelect.addEventListener("change", () => {
+  fillProjectTypeSelect();
+
   if (deleteSelectedButton) {
-    deleteSelectedButton.disabled = !getSelectedModelIndexes().length
+    deleteSelectedButton.disabled = !getSelectedProjectEntries().length
       || !currentSession.authenticated
       || currentModelSource === "share";
   }
 
   if (!getSelectedModelIndexes().length) {
     showReadyState();
+  }
+});
+
+projectTypeSelect?.addEventListener("change", () => {
+  if (deleteSelectedButton) {
+    deleteSelectedButton.disabled = !getSelectedProjectEntries().length
+      || !currentSession.authenticated
+      || currentModelSource === "share";
   }
 });
 
