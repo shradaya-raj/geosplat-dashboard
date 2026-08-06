@@ -879,6 +879,8 @@ function normalizeManifest(rawManifest) {
         projectId: model.projectId,
         projectName: model.projectName,
         projectSlug: model.projectSlug,
+        projectTotalAssets: model.projectTotalAssets,
+        projectApprovedAssets: model.projectApprovedAssets,
         assetType: model.assetType || "gaussian_splatting",
         assetTypeLabel: model.assetTypeLabel || ASSET_TYPE_LABELS[model.assetType] || "Gaussian Splatting",
         status: model.status || "published",
