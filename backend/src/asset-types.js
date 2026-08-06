@@ -13,7 +13,7 @@ export const ASSET_TYPES = {
   },
   orthomosaic: {
     label: "Ortho / Orthomosaic",
-    extensions: [".tif", ".tiff", ".geotiff", ".png", ".jpg", ".jpeg", ".webp", ".jp2", ".zip"]
+    extensions: [".tif", ".tiff", ".geotiff", ".tfw", ".prj", ".zip"]
   }
 };
 

@@ -26,13 +26,13 @@ const UPLOAD_EXTENSIONS_BY_TYPE = {
   mesh_3d: [".obj", ".fbx", ".glb", ".gltf", ".stl", ".dae", ".3dm", ".zip"],
   gaussian_splatting: [".ply", ".splat", ".ksplat", ".spz"],
   point_cloud: [".ply", ".las", ".laz", ".pcd", ".xyz", ".pts", ".e57", ".zip"],
-  orthomosaic: [".tif", ".tiff", ".geotiff", ".png", ".jpg", ".jpeg", ".webp", ".jp2", ".zip"]
+  orthomosaic: [".tif", ".tiff", ".geotiff", ".tfw", ".prj", ".zip"]
 };
 const VIEWABLE_EXTENSIONS_BY_TYPE = {
   mesh_3d: [".glb", ".gltf", ".obj", ".stl"],
   gaussian_splatting: [".ply", ".splat", ".ksplat", ".spz"],
   point_cloud: [".ply", ".pcd"],
-  orthomosaic: [".png", ".jpg", ".jpeg", ".webp"]
+  orthomosaic: [".tif", ".tiff", ".geotiff"]
 };
 const ASSET_TYPE_LABELS = {
   mesh_3d: "3D Mesh",
@@ -53,6 +53,7 @@ let OBJLoader;
 let PCDLoader;
 let PLYLoader;
 let STLLoader;
+let TIFFLoader;
 let sceneFormatByExtension = {};
 
 const connectionLabel = document.querySelector("#connection-label");
@@ -158,7 +159,7 @@ async function loadViewerLibraries() {
 }
 
 async function loadGenericViewerLibraries() {
-  if (THREE && OrbitControls && GLTFLoader && OBJLoader && PCDLoader && PLYLoader && STLLoader) return;
+  if (THREE && OrbitControls && GLTFLoader && OBJLoader && PCDLoader && PLYLoader && STLLoader && TIFFLoader) return;
 
   const [
     threeModule,
@@ -167,7 +168,8 @@ async function loadGenericViewerLibraries() {
     objModule,
     pcdModule,
     plyModule,
-    stlModule
+    stlModule,
+    tiffModule
   ] = await Promise.all([
     import("three"),
     import("three/addons/controls/OrbitControls.js"),
@@ -175,7 +177,8 @@ async function loadGenericViewerLibraries() {
     import("three/addons/loaders/OBJLoader.js"),
     import("three/addons/loaders/PCDLoader.js"),
     import("three/addons/loaders/PLYLoader.js"),
-    import("three/addons/loaders/STLLoader.js")
+    import("three/addons/loaders/STLLoader.js"),
+    import("three/addons/loaders/TIFFLoader.js")
   ]);
 
   THREE = threeModule;
@@ -185,6 +188,7 @@ async function loadGenericViewerLibraries() {
   PCDLoader = pcdModule.PCDLoader;
   PLYLoader = plyModule.PLYLoader;
   STLLoader = stlModule.STLLoader;
+  TIFFLoader = tiffModule.TIFFLoader;
 }
 
 function applyTheme(theme) {
@@ -965,7 +969,7 @@ async function loadOrthoObject(model) {
     throw new Error(`${extension || "This ortho format"} needs tile conversion before browser viewing.`);
   }
 
-  const texture = await new THREE.TextureLoader().loadAsync(modelPathToUrl(model.path));
+  const texture = await new TIFFLoader().loadAsync(modelPathToUrl(model.path));
   texture.colorSpace = THREE.SRGBColorSpace;
   const aspect = texture.image?.width && texture.image?.height
     ? texture.image.width / texture.image.height
