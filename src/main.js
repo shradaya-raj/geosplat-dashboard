@@ -43,6 +43,7 @@ const ASSET_TYPE_LABELS = {
 const MAX_LOCAL_PREVIEW_BYTES = 350 * 1024 * 1024;
 const MAX_LOCAL_PLY_PREVIEW_BYTES = 150 * 1024 * 1024;
 const LARGE_HOSTED_MODEL_BYTES = 125 * 1024 * 1024;
+const MAX_ORTHO_PREVIEW_DIMENSION = 1536;
 const STALLED_LOAD_WARNING_MS = 45000;
 const MODEL_REFRESH_INTERVAL_MS = 12000;
 let GaussianSplats3D;
@@ -53,7 +54,7 @@ let OBJLoader;
 let PCDLoader;
 let PLYLoader;
 let STLLoader;
-let TIFFLoader;
+let GeoTIFF;
 let sceneFormatByExtension = {};
 
 const connectionLabel = document.querySelector("#connection-label");
@@ -161,8 +162,7 @@ async function loadViewerLibraries() {
 }
 
 async function loadGenericViewerLibraries() {
-  if (THREE && OrbitControls && GLTFLoader && OBJLoader && PCDLoader && PLYLoader && STLLoader && TIFFLoader) return;
-  globalThis.log ??= (...args) => console.warn(...args);
+  if (THREE && OrbitControls && GLTFLoader && OBJLoader && PCDLoader && PLYLoader && STLLoader && GeoTIFF) return;
 
   const [
     threeModule,
@@ -172,7 +172,7 @@ async function loadGenericViewerLibraries() {
     pcdModule,
     plyModule,
     stlModule,
-    tiffModule
+    geotiffModule
   ] = await Promise.all([
     import("three"),
     import("three/addons/controls/OrbitControls.js"),
@@ -181,7 +181,7 @@ async function loadGenericViewerLibraries() {
     import("three/addons/loaders/PCDLoader.js"),
     import("three/addons/loaders/PLYLoader.js"),
     import("three/addons/loaders/STLLoader.js"),
-    import("three/addons/loaders/TIFFLoader.js")
+    import("geotiff")
   ]);
 
   THREE = threeModule;
@@ -191,7 +191,7 @@ async function loadGenericViewerLibraries() {
   PCDLoader = pcdModule.PCDLoader;
   PLYLoader = plyModule.PLYLoader;
   STLLoader = stlModule.STLLoader;
-  TIFFLoader = tiffModule.TIFFLoader;
+  GeoTIFF = geotiffModule;
 }
 
 function applyTheme(theme) {
@@ -966,26 +966,111 @@ async function loadPointCloudObject(model) {
   throw new Error(`${extension || "This point cloud format"} needs conversion before browser viewing.`);
 }
 
+function computePreviewSize(width, height, maxDimension = MAX_ORTHO_PREVIEW_DIMENSION) {
+  const longest = Math.max(width, height, 1);
+  const scale = Math.min(1, maxDimension / longest);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale))
+  };
+}
+
+async function openGeoTiff(url) {
+  try {
+    return await GeoTIFF.fromUrl(url);
+  } catch (rangeError) {
+    const response = await fetch(url);
+    if (!response.ok) throw rangeError;
+    return GeoTIFF.fromArrayBuffer(await response.arrayBuffer());
+  }
+}
+
+function normalizeRasterValue(value, min, max) {
+  if (!Number.isFinite(value)) return 0;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+    return Math.max(0, Math.min(255, Math.round(value)));
+  }
+  return Math.max(0, Math.min(255, Math.round(((value - min) / (max - min)) * 255)));
+}
+
+function findRasterRange(raster, bandCount, bandOffset) {
+  let min = Infinity;
+  let max = -Infinity;
+  const pixelCount = Math.max(1, Math.floor(raster.length / Math.max(bandCount, 1)));
+  const step = Math.max(1, Math.floor(pixelCount / 100000));
+
+  for (let pixel = 0; pixel < pixelCount; pixel += step) {
+    const value = Number(raster[pixel * bandCount + bandOffset]);
+    if (!Number.isFinite(value)) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+
+  return { min, max };
+}
+
+function rasterToTexture(raster, width, height, samplesPerPixel) {
+  const bandCount = Math.max(1, Math.min(samplesPerPixel || 1, 4));
+  const visibleBands = Math.min(bandCount, 3);
+  const ranges = Array.from({ length: visibleBands }, (_, band) => findRasterRange(raster, bandCount, band));
+  const rgba = new Uint8Array(width * height * 4);
+
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    const sourceOffset = pixel * bandCount;
+    const targetOffset = pixel * 4;
+
+    if (bandCount >= 3) {
+      rgba[targetOffset] = normalizeRasterValue(raster[sourceOffset], ranges[0].min, ranges[0].max);
+      rgba[targetOffset + 1] = normalizeRasterValue(raster[sourceOffset + 1], ranges[1].min, ranges[1].max);
+      rgba[targetOffset + 2] = normalizeRasterValue(raster[sourceOffset + 2], ranges[2].min, ranges[2].max);
+    } else {
+      const gray = normalizeRasterValue(raster[sourceOffset], ranges[0].min, ranges[0].max);
+      rgba[targetOffset] = gray;
+      rgba[targetOffset + 1] = gray;
+      rgba[targetOffset + 2] = gray;
+    }
+
+    rgba[targetOffset + 3] = bandCount >= 4
+      ? normalizeRasterValue(raster[sourceOffset + 3], 0, 255)
+      : 255;
+  }
+
+  const texture = new THREE.DataTexture(rgba, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 async function loadOrthoObject(model) {
   const extension = getFileExtension(model.filename || model.path || "");
   if (!VIEWABLE_EXTENSIONS_BY_TYPE.orthomosaic.includes(extension)) {
     throw new Error(`${extension || "This ortho format"} needs tile conversion before browser viewing.`);
   }
 
-  let texture;
   try {
-    texture = await new TIFFLoader().loadAsync(modelPathToUrl(model.path));
+    const tiff = await openGeoTiff(modelPathToUrl(model.path));
+    const image = await tiff.getImage();
+    const sourceWidth = image.getWidth();
+    const sourceHeight = image.getHeight();
+    const sampleCount = Math.max(1, Math.min(image.getSamplesPerPixel?.() || 1, 4));
+    const previewSize = computePreviewSize(sourceWidth, sourceHeight);
+    const raster = await image.readRasters({
+      width: previewSize.width,
+      height: previewSize.height,
+      samples: Array.from({ length: sampleCount }, (_, index) => index),
+      interleave: true
+    });
+    const texture = rasterToTexture(raster, previewSize.width, previewSize.height, sampleCount);
+    const aspect = sourceWidth && sourceHeight
+      ? sourceWidth / sourceHeight
+      : previewSize.width / previewSize.height;
+    return new THREE.Mesh(
+      new THREE.PlaneGeometry(aspect, 1),
+      new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
+    );
   } catch (error) {
-    throw new Error(`This GeoTIFF could not be decoded in the browser. ${error?.message || "Convert it to web map tiles or a Cloud Optimized GeoTIFF preview."}`);
+    throw new Error(`This GeoTIFF could not be previewed in the browser. ${error?.message || "Convert it to web map tiles or a Cloud Optimized GeoTIFF preview."}`);
   }
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const aspect = texture.image?.width && texture.image?.height
-    ? texture.image.width / texture.image.height
-    : 1;
-  return new THREE.Mesh(
-    new THREE.PlaneGeometry(aspect, 1),
-    new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
-  );
 }
 
 async function loadGenericAssetObject(model, index, total) {

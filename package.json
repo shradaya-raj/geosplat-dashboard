@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@mkkellogg/gaussian-splats-3d": "^0.4.7",
-    "@supabase/supabase-js": "^2.112.0"
+    "@supabase/supabase-js": "^2.112.0",
+    "geotiff": "^3.0.5"
   },
   "devDependencies": {
     "vite": "latest"
