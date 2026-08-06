@@ -916,8 +916,15 @@ function normalizeProjectsToManifest(projects = []) {
     const assetsByType = project.assetsByType || {};
     const assets = Object.values(assetsByType)
       .flatMap((group) => Array.isArray(group?.files) ? group.files : []);
-    const totalAssets = assets.length;
-    const approvedAssets = assets.filter((asset) => asset.status === "published").length;
+    const countedAssets = Number(project.totalAssetCount);
+    const countedApprovedAssets = Number(project.approvedAssetCount);
+    const assetCountFallback = project.assetCounts
+      ? Object.values(project.assetCounts).reduce((sum, count) => sum + Number(count || 0), 0)
+      : assets.length;
+    const totalAssets = Number.isFinite(countedAssets) ? countedAssets : assetCountFallback;
+    const approvedAssets = Number.isFinite(countedApprovedAssets)
+      ? countedApprovedAssets
+      : assets.filter((asset) => asset.status === "published").length;
 
     if (!assets.length) {
       projectModels.push({
@@ -929,8 +936,8 @@ function normalizeProjectsToManifest(projects = []) {
         projectSlug: project.slug,
         status: project.status || "active",
         canLoad: false,
-        projectTotalAssets: 0,
-        projectApprovedAssets: 0
+        projectTotalAssets: totalAssets,
+        projectApprovedAssets: approvedAssets
       });
       continue;
     }

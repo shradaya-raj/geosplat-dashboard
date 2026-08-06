@@ -112,6 +112,8 @@ function publicModel(model) {
 
 function publicProject(project) {
   const assets = Array.isArray(project.assets) ? project.assets : [];
+  const totalAssetCount = assets.length;
+  const approvedAssetCount = assets.filter((asset) => asset.status === "published").length;
   return {
     id: project.id,
     name: project.name,
@@ -119,6 +121,8 @@ function publicProject(project) {
     status: project.status,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
+    totalAssetCount,
+    approvedAssetCount,
     assetCounts: Object.fromEntries(
       Object.keys(ASSET_TYPES).map((assetType) => [
         assetType,
