@@ -634,12 +634,35 @@ html[data-state="error"] .live-dot {
   padding: 11px 10px;
   border-radius: 14px;
   color: var(--ink);
-  background: transparent;
+  background: var(--panel-solid);
 }
 
 .select-control option:checked {
   color: var(--accent-ink);
   background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent-2) 68%, var(--panel-solid)));
+}
+
+.type-select-control option {
+  color: var(--ink);
+  background: var(--panel-solid);
+}
+
+:root[data-theme="dark"] .select-control select,
+:root[data-theme="dark"] .type-select-control select {
+  color: #f4fbf7;
+  background: #101715;
+  border-color: rgba(203, 232, 218, 0.18);
+}
+
+:root[data-theme="dark"] .select-control option,
+:root[data-theme="dark"] .type-select-control option {
+  color: #f4fbf7;
+  background: #101715;
+}
+
+:root[data-theme="dark"] .select-control option:checked {
+  color: #06100d;
+  background: linear-gradient(135deg, #9cff57, #56dca9);
 }
 
 .control-grid {
