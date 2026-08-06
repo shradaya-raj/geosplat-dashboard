@@ -568,8 +568,8 @@ function refreshUploadControls() {
   if (uploadAwaitingApproval) {
     cloudUploadButton.disabled = false;
     cloudUploadButton.textContent = "Wait";
-    cloudUploadButton.classList.remove("button-primary");
-    cloudUploadButton.classList.add("button-secondary");
+    cloudUploadButton.classList.add("button-primary");
+    cloudUploadButton.classList.remove("button-secondary");
     return;
   }
 
