@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { config } from "./config.js";
 import { getExtension } from "./r2.js";
-import { DEFAULT_ASSET_TYPE, getAssetTypeLabel, isRenderableGaussianAsset, normalizeAssetType } from "./asset-types.js";
+import { DEFAULT_ASSET_TYPE, getAssetTypeLabel, isRenderableAsset, normalizeAssetType } from "./asset-types.js";
 import {
   createProjectRecord,
   createModelRecord,
@@ -119,31 +119,31 @@ function shareRowToShare(row) {
 export async function listPublishedUserModels(userId) {
   if (useSupabase()) {
     const rows = await listPublishedModelsForUser(userId);
-    return rows.map(rowToModel).filter((model) => isRenderableGaussianAsset(model.assetType, model.format));
+    return rows.map(rowToModel).filter((model) => isRenderableAsset(model.assetType, model.format));
   }
 
   const models = await listModelsForUser(userId);
-  return models.filter((model) => model.status === "published");
+  return models.filter((model) => model.status === "published" && isRenderableAsset(model.assetType, model.format));
 }
 
 export async function listOwnedUserModels(userId) {
   if (useSupabase()) {
     const rows = await listModelsForUserFromSupabase(userId);
-    return rows.map(rowToModel).filter((model) => isRenderableGaussianAsset(model.assetType, model.format));
+    return rows.map(rowToModel).filter((model) => isRenderableAsset(model.assetType, model.format));
   }
 
   return (await listModelsForUser(userId))
-    .filter((model) => isRenderableGaussianAsset(model.assetType || DEFAULT_ASSET_TYPE, model.format));
+    .filter((model) => isRenderableAsset(model.assetType || DEFAULT_ASSET_TYPE, model.format));
 }
 
 export async function listPublishedDemoModels() {
   if (useSupabase()) {
     const rows = await listDemoModelsFromSupabase();
-    return rows.map(rowToModel).filter((model) => isRenderableGaussianAsset(model.assetType, model.format));
+    return rows.map(rowToModel).filter((model) => isRenderableAsset(model.assetType, model.format));
   }
 
   const models = await listDemoModels();
-  return models.filter((model) => model.status === "published");
+  return models.filter((model) => model.status === "published" && isRenderableAsset(model.assetType, model.format));
 }
 
 export async function resolveUploadProject({ user, projectId = null, projectName = "" }) {

@@ -8,6 +8,7 @@ import {
   getSession,
   getUserModels,
   getUserProjects,
+  getViewFileArrayBuffer,
   getViewUrls,
   uploadFileToSignedUrl
 } from "./api.js";
@@ -975,14 +976,34 @@ function computePreviewSize(width, height, maxDimension = MAX_ORTHO_PREVIEW_DIME
   };
 }
 
-async function openGeoTiff(url) {
-  try {
-    return await GeoTIFF.fromUrl(url);
-  } catch (rangeError) {
-    const response = await fetch(url);
-    if (!response.ok) throw rangeError;
-    return GeoTIFF.fromArrayBuffer(await response.arrayBuffer());
+async function fetchGeoTiffArrayBuffer(url) {
+  const response = await fetch(url, {
+    cache: "no-store",
+    credentials: "omit"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch GeoTIFF preview file (${response.status}).`);
   }
+
+  return response.arrayBuffer();
+}
+
+async function openGeoTiff(model, url) {
+  let arrayBuffer;
+
+  try {
+    arrayBuffer = await fetchGeoTiffArrayBuffer(url);
+  } catch (directError) {
+    if (!isBackendEnabled() || !model?.id) throw directError;
+    arrayBuffer = await getViewFileArrayBuffer(model.id);
+  }
+
+  if (!arrayBuffer?.byteLength) {
+    throw new Error("GeoTIFF preview file is empty.");
+  }
+
+  return GeoTIFF.fromArrayBuffer(arrayBuffer);
 }
 
 function normalizeRasterValue(value, min, max) {
@@ -1048,7 +1069,7 @@ async function loadOrthoObject(model) {
   }
 
   try {
-    const tiff = await openGeoTiff(modelPathToUrl(model.path));
+    const tiff = await openGeoTiff(model, modelPathToUrl(model.path));
     const image = await tiff.getImage();
     const sourceWidth = image.getWidth();
     const sourceHeight = image.getHeight();
@@ -1069,7 +1090,11 @@ async function loadOrthoObject(model) {
       new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
     );
   } catch (error) {
-    throw new Error(`This GeoTIFF could not be previewed in the browser. ${error?.message || "Convert it to web map tiles or a Cloud Optimized GeoTIFF preview."}`);
+    const reason = error?.message || "Convert it to web map tiles or a Cloud Optimized GeoTIFF preview.";
+    const fetchHint = /failed to fetch|networkerror|cors/i.test(reason)
+      ? " The file URL may be expired or blocked by storage CORS."
+      : "";
+    throw new Error(`This GeoTIFF could not be previewed in the browser. ${reason}${fetchHint}`);
   }
 }
 

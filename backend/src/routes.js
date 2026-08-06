@@ -9,6 +9,7 @@ import {
   deleteObject,
   getExtension,
   getObjectInfo,
+  getObjectStream,
   isR2Configured
 } from "./r2.js";
 import { ASSET_TYPES, getAssetTypeLabel, normalizeAssetType } from "./asset-types.js";
@@ -58,6 +59,12 @@ function escapeHtml(value = "") {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function safeHeaderFilename(value = "model") {
+  return String(value || "model")
+    .replace(/[\r\n"]/g, "_")
+    .slice(0, 180);
 }
 
 function formatBytes(bytes = 0) {
@@ -215,6 +222,18 @@ async function withSignedModelUrls(models) {
   return signed;
 }
 
+async function getViewableModelForRequest(req) {
+  const shareToken = typeof req.query.share === "string" ? req.query.share : "";
+  if (shareToken) {
+    const models = await getModelsForShare(shareToken);
+    return models.find((model) => model.id === req.params.id && model.status === "published") || null;
+  }
+
+  if (!req.user) return null;
+  const [model] = await getModelsOwnedByUser([req.params.id], req.user.id);
+  return model?.status === "published" ? model : null;
+}
+
 export function createRouter() {
   const router = Router();
 
@@ -300,6 +319,34 @@ export function createRouter() {
       const publishedModels = ownedModels.filter((model) => model.status === "published");
       const signedModels = await withSignedModelUrls(publishedModels);
       res.json({ models: signedModels.map(publicModel) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/api/models/:id/file", attachOptionalAuth, async (req, res, next) => {
+    try {
+      const model = await getViewableModelForRequest(req);
+      if (!model) return res.status(404).json({ error: "Published file was not found for this viewer." });
+      if (!model.r2Key || !isR2Configured()) return res.status(404).json({ error: "File is not available for viewing." });
+
+      const object = await getObjectStream(model.r2Key);
+      res.setHeader("Content-Type", object.contentType);
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Content-Disposition", `inline; filename="${safeHeaderFilename(model.filename || model.name || "model")}"`);
+      if (object.contentLength) res.setHeader("Content-Length", String(object.contentLength));
+
+      if (typeof object.body?.pipe === "function") {
+        object.body.pipe(res);
+        return;
+      }
+
+      if (!object.body?.transformToByteArray) {
+        return res.status(502).json({ error: "File stream is not readable." });
+      }
+
+      const buffer = Buffer.from(await object.body.transformToByteArray());
+      res.end(buffer);
     } catch (error) {
       next(error);
     }

@@ -79,6 +79,35 @@ export async function getViewUrls(modelIds) {
   });
 }
 
+export async function getViewFileArrayBuffer(modelId) {
+  if (!isBackendEnabled()) return null;
+  const accessToken = await getAccessToken();
+  const shareToken = new URLSearchParams(window.location.search).get("share");
+  const query = shareToken ? `?share=${encodeURIComponent(shareToken)}` : "";
+  const response = await fetch(`${APP_CONFIG.apiBaseUrl}/api/models/${encodeURIComponent(modelId)}/file${query}`, {
+    credentials: "include",
+    cache: "no-store",
+    headers: {
+      Accept: "application/octet-stream",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+    }
+  });
+
+  if (!response.ok) {
+    let message = `File request failed: ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (payload?.error) message = payload.error;
+    } catch {
+      const text = await response.text().catch(() => "");
+      if (text) message = text.slice(0, 220);
+    }
+    throw new Error(message);
+  }
+
+  return response.arrayBuffer();
+}
+
 export async function createUploadSession(file, options = {}) {
   return apiFetch("/api/uploads/session", {
     method: "POST",

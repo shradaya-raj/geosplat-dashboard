@@ -91,6 +91,21 @@ export async function getObjectInfo(key) {
   };
 }
 
+export async function getObjectStream(key) {
+  const client = getR2Client();
+  const result = await client.send(new GetObjectCommand({
+    Bucket: config.r2.bucket,
+    Key: key
+  }));
+
+  return {
+    body: result.Body,
+    contentType: result.ContentType || "application/octet-stream",
+    contentLength: result.ContentLength,
+    updatedAt: result.LastModified?.toISOString()
+  };
+}
+
 export async function deleteObject(key) {
   const client = getR2Client();
   await client.send(new DeleteObjectCommand({
