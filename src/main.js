@@ -1631,15 +1631,24 @@ async function deleteSelectedHostedFiles() {
   }
 
   const projectEntries = selectedEntries.filter((entry) => entry.indexes.some((index) => models[index]?.projectId));
+  const selectedProjectModels = selectedModels.filter((model) => model.projectId);
   const standaloneModels = selectedModels.filter((model) => !model.projectId);
-  const projectIds = [...new Set(
-    projectEntries
+  const projectIds = [...new Set([
+    ...projectEntries
       .map((entry) => entry.indexes.map((index) => models[index]?.projectId).find(Boolean))
+      .filter(Boolean),
+    ...selectedProjectModels
+      .map((model) => model.projectId)
       .filter(Boolean)
-  )];
-  const projectNames = projectEntries
-    .map((entry) => entry.label)
-    .filter(Boolean);
+  ])];
+  const projectNames = [...new Set([
+    ...projectEntries
+      .map((entry) => entry.label)
+      .filter(Boolean),
+    ...selectedProjectModels
+      .map((model) => model.projectName)
+      .filter(Boolean)
+  ])];
   const fallbackNames = standaloneModels.map((model) => model.name).filter(Boolean);
   const deleteNames = projectNames.length ? projectNames : fallbackNames;
   const titleTarget = deleteNames.length === 1
