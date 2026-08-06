@@ -148,6 +148,16 @@ function applyTheme(theme) {
   }
 }
 
+function animateThemeSwap() {
+  document.documentElement.classList.remove("is-theme-swapping");
+  window.requestAnimationFrame(() => {
+    document.documentElement.classList.add("is-theme-swapping");
+    window.setTimeout(() => {
+      document.documentElement.classList.remove("is-theme-swapping");
+    }, 680);
+  });
+}
+
 function slugify(value) {
   return String(value || "")
     .toLowerCase()
@@ -1759,6 +1769,7 @@ accountAction?.addEventListener("click", async (event) => {
 });
 themeToggle?.addEventListener("click", () => {
   const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  animateThemeSwap();
   applyTheme(nextTheme);
 });
 uploadHelpButton.addEventListener("click", () => {

@@ -56,6 +56,17 @@
   box-sizing: border-box;
 }
 
+*,
+*::before,
+*::after {
+  transition:
+    background-color 320ms ease,
+    border-color 320ms ease,
+    color 240ms ease,
+    box-shadow 320ms ease,
+    opacity 240ms ease;
+}
+
 html,
 body,
 #app {
@@ -72,6 +83,29 @@ body {
     radial-gradient(circle at 78% 12%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 28%),
     radial-gradient(circle at 58% 94%, color-mix(in srgb, var(--accent-3) 14%, transparent), transparent 30%),
     linear-gradient(145deg, var(--bg), color-mix(in srgb, var(--bg) 80%, #ffffff));
+}
+
+body::before,
+body::after {
+  transition: opacity 420ms ease, background 420ms ease, filter 420ms ease;
+}
+
+:root::before {
+  content: "";
+  position: fixed;
+  z-index: 9999;
+  inset: -20%;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.92);
+  background:
+    radial-gradient(circle at 82% 10%, color-mix(in srgb, var(--accent) 44%, transparent), transparent 22%),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent-2) 22%, transparent), transparent 42%);
+  filter: blur(10px);
+}
+
+:root.is-theme-swapping::before {
+  animation: theme-swap-wash 620ms cubic-bezier(.2, .8, .2, 1);
 }
 
 :root[data-theme="dark"] body {
@@ -561,25 +595,23 @@ html[data-state="error"] .live-dot {
   border: 1px solid var(--line);
   border-radius: 22px;
   color: var(--ink);
-  background: color-mix(in srgb, var(--panel-solid) 72%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 52%, transparent), color-mix(in srgb, var(--panel) 22%, transparent));
   outline: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  box-shadow: none;
 }
 
 .select-control option {
-  padding: 10px;
-  color: #121917;
-  background: #ffffff;
-}
-
-:root[data-theme="dark"] .select-control option {
-  color: #071211;
-  background: #f5f7f4;
+  margin: 4px 0;
+  padding: 11px 10px;
+  border-radius: 14px;
+  color: var(--ink);
+  background: transparent;
 }
 
 .select-control option:checked {
   color: var(--accent-ink);
-  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent-2) 68%, #ffffff));
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent-2) 68%, var(--panel-solid)));
 }
 
 .control-grid {
@@ -1202,6 +1234,20 @@ code {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes theme-swap-wash {
+  0% {
+    opacity: 0;
+    transform: scale(0.88) rotate(-2deg);
+  }
+  35% {
+    opacity: 0.78;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12) rotate(2deg);
   }
 }
 
