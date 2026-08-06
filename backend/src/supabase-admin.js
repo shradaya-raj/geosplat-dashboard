@@ -85,6 +85,23 @@ export async function updateModelRecord(id, patch, ownerId = null) {
   return data;
 }
 
+export async function updateProjectRecord(id, patch, ownerId = null) {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from("projects")
+    .update(patch)
+    .eq("id", id);
+
+  if (ownerId) query = query.eq("owner_id", ownerId);
+
+  const { data, error } = await query
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function getSupabaseModelsByIds(ids) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -146,6 +163,32 @@ export async function listModelsForProject({ projectId, ownerId, assetType = nul
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
+}
+
+export async function listPendingModelsForProject({ projectId, ownerId }) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("models")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("owner_id", ownerId)
+    .in("status", ["pending", "processing"])
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getProjectByApprovalToken(token) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("metadata->>approvalToken", token)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
 }
 
 export async function deleteModelRecord({ modelId, ownerId }) {

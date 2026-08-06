@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { config } from "./config.js";
-import { sendApprovalEmail } from "./email.js";
+import { sendApprovalEmail, sendProjectApprovalEmail } from "./email.js";
 import { attachOptionalAuth, authPending, getSessionPayload, requireAuth } from "./auth.js";
 import {
   buildModelKey,
@@ -20,6 +20,7 @@ import {
   deleteOwnedProjectAssets,
   getProjectAssetsForDelete,
   getOwnedPublishedModel,
+  getProjectApprovalContext,
   getModelsForShare,
   getModelsOwnedByUser,
   getRepositoryMode,
@@ -29,7 +30,8 @@ import {
   markModelUploadComplete,
   recordModelAccess,
   resolveUploadProject,
-  reviewModelByApprovalToken
+  reviewModelByApprovalToken,
+  reviewProjectModelsByToken
 } from "./model-repository.js";
 
 function frontendUrl(search = "") {
@@ -39,9 +41,15 @@ function frontendUrl(search = "") {
   return `${config.frontendOrigin}${path}${search}`;
 }
 
-function backendUrl(path = "") {
+function backendUrl(path = "", req = null) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${config.backendBaseUrl}${normalizedPath}`;
+  const configured = config.backendBaseUrl;
+  const shouldInfer = req && /^https?:\/\/localhost(?::\d+)?$/i.test(configured);
+  if (!shouldInfer) return `${configured}${normalizedPath}`;
+
+  const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
+  const host = req.get("x-forwarded-host") || req.get("host");
+  return `${protocol}://${host}${normalizedPath}`;
 }
 
 function escapeHtml(value = "") {
@@ -51,6 +59,24 @@ function escapeHtml(value = "") {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function formatBytes(bytes = 0) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) return "unknown";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function normalizeFormList(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value.filter(Boolean) : [value].filter(Boolean);
 }
 
 function extensionOf(filename = "") {
@@ -325,13 +351,44 @@ export function createRouter() {
         r2Key,
         objectInfo: info,
         name: req.body?.name,
-        filename: req.body?.filename
+        filename: req.body?.filename,
+        uploadBatch: req.body?.uploadBatch || null
       });
 
+      const uploadBatch = req.body?.uploadBatch || null;
+      const isFinalBatchFile = uploadBatch
+        && Number.isFinite(Number(uploadBatch.total))
+        && Number.isFinite(Number(uploadBatch.index))
+        && Number(uploadBatch.total) > 0
+        && Number(uploadBatch.index) + 1 >= Number(uploadBatch.total);
+      const projectApprovalToken = record.metadata?.projectApprovalToken;
+
+      if (isFinalBatchFile && projectApprovalToken) {
+        const context = await getProjectApprovalContext(projectApprovalToken);
+        const pendingModels = context?.models || [];
+
+        if (pendingModels.length) {
+          const reviewUrl = backendUrl(`/api/admin/review-project?token=${encodeURIComponent(projectApprovalToken)}`, req);
+          const approveAllUrl = backendUrl(`/api/admin/review-project/action?token=${encodeURIComponent(projectApprovalToken)}&decision=approve`, req);
+          const rejectAllUrl = backendUrl(`/api/admin/review-project/action?token=${encodeURIComponent(projectApprovalToken)}&decision=reject`, req);
+
+          sendProjectApprovalEmail({
+            project: context.project,
+            models: pendingModels,
+            uploadedBy: req.session.user.email,
+            reviewUrl,
+            approveAllUrl,
+            rejectAllUrl
+          }).catch((error) => {
+            console.error("Project approval email failed.", error);
+          });
+        }
+      }
+
       const approvalToken = record.approvalToken;
-      if (approvalToken) {
-        const approveUrl = backendUrl(`/api/admin/review-model?token=${encodeURIComponent(approvalToken)}&decision=approve`);
-        const rejectUrl = backendUrl(`/api/admin/review-model?token=${encodeURIComponent(approvalToken)}&decision=reject`);
+      if (approvalToken && !uploadBatch) {
+        const approveUrl = backendUrl(`/api/admin/review-model?token=${encodeURIComponent(approvalToken)}&decision=approve`, req);
+        const rejectUrl = backendUrl(`/api/admin/review-model?token=${encodeURIComponent(approvalToken)}&decision=reject`, req);
         sendApprovalEmail({
           model: record,
           uploadedBy: req.session.user.email,
@@ -384,6 +441,151 @@ export function createRouter() {
               <h1>Model ${statusLabel}</h1>
               <p><strong>${safeModelName}</strong> has been ${statusLabel}.</p>
               ${decision === "reject" ? "" : `<p><a href="${openUrl}">Open the dashboard</a></p>`}
+            </main>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/api/admin/review-project", async (req, res, next) => {
+    try {
+      const token = typeof req.query.token === "string" ? req.query.token : "";
+      if (!token) return res.status(400).send("Missing approval token.");
+
+      const context = await getProjectApprovalContext(token);
+      if (!context) return res.status(404).send("This project approval link is invalid or expired.");
+
+      const safeProjectName = escapeHtml(context.project?.name || "Uploaded project");
+      const rows = context.models.map((model) => `
+        <tr>
+          <td><input type="checkbox" name="modelIds" value="${escapeHtml(model.id)}" checked /></td>
+          <td>
+            <strong>${escapeHtml(model.name || model.filename || model.id)}</strong>
+            <small>${escapeHtml(model.filename || "")}</small>
+          </td>
+          <td>${escapeHtml(model.assetTypeLabel || model.assetType || "File")}</td>
+          <td>${escapeHtml(formatBytes(model.size))}</td>
+          <td>
+            <a class="mini approve" href="${backendUrl(`/api/admin/review-model?token=${encodeURIComponent(model.approvalToken)}&decision=approve`, req)}">Approve</a>
+            <a class="mini reject" href="${backendUrl(`/api/admin/review-model?token=${encodeURIComponent(model.approvalToken)}&decision=reject`, req)}">Reject</a>
+          </td>
+        </tr>
+      `).join("");
+
+      const approveAllUrl = backendUrl(`/api/admin/review-project/action?token=${encodeURIComponent(token)}&decision=approve`, req);
+      const rejectAllUrl = backendUrl(`/api/admin/review-project/action?token=${encodeURIComponent(token)}&decision=reject`, req);
+      const dashboardUrl = frontendUrl("");
+
+      res.type("html").send(`
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Review project upload</title>
+            <style>
+              body { font-family: Inter, Arial, sans-serif; background: #f3fbf4; color: #132019; margin: 0; padding: 28px; }
+              main { max-width: 1040px; margin: 0 auto; padding: 28px; border-radius: 28px; background: rgba(255,255,255,.88); box-shadow: 0 24px 80px rgba(20, 60, 35, .14); }
+              h1 { margin: 0 0 6px; font-size: clamp(28px, 5vw, 44px); letter-spacing: -.04em; }
+              p { color: #647269; }
+              table { width: 100%; border-collapse: collapse; margin: 22px 0; overflow: hidden; border-radius: 18px; }
+              th, td { padding: 13px 12px; border-bottom: 1px solid #dde9e0; text-align: left; vertical-align: middle; }
+              th { color: #526158; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+              td small { display: block; color: #7a887f; margin-top: 4px; }
+              input[type="checkbox"] { width: 18px; height: 18px; accent-color: #61d97e; }
+              .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+              button, .button, .mini { border: 0; border-radius: 999px; padding: 11px 16px; font-weight: 800; text-decoration: none; cursor: pointer; }
+              .approve, button[name="decision"][value="approve"] { background: #76e790; color: #102015; }
+              .reject, button[name="decision"][value="reject"] { background: #ffe0db; color: #7a2115; }
+              .button { background: #ecf2ee; color: #1a241e; }
+              .mini { display: inline-block; padding: 8px 11px; font-size: 12px; margin-right: 5px; }
+              .empty { padding: 24px; border-radius: 18px; background: #eef6ef; }
+              @media (max-width: 760px) { body { padding: 10px; } main { padding: 18px; } table { font-size: 13px; } th:nth-child(3), td:nth-child(3), th:nth-child(4), td:nth-child(4) { display: none; } }
+            </style>
+          </head>
+          <body>
+            <main>
+              <h1>Review project upload</h1>
+              <p><strong>${safeProjectName}</strong> has ${context.models.length} pending file${context.models.length === 1 ? "" : "s"}. Select exactly what should be approved.</p>
+              ${context.models.length ? `
+                <form method="post" action="${backendUrl("/api/admin/review-project", req)}">
+                  <input type="hidden" name="token" value="${escapeHtml(token)}" />
+                  <table>
+                    <thead>
+                      <tr><th>Select</th><th>File</th><th>Type</th><th>Size</th><th>Quick action</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                  </table>
+                  <div class="actions">
+                    <button type="submit" name="decision" value="approve">Approve selected</button>
+                    <button type="submit" name="decision" value="reject">Reject selected</button>
+                    <a class="button approve" href="${approveAllUrl}">Approve all</a>
+                    <a class="button reject" href="${rejectAllUrl}">Reject all</a>
+                    <a class="button" href="${dashboardUrl}">Open dashboard</a>
+                  </div>
+                </form>
+              ` : `
+                <div class="empty">No pending files remain for this project.</div>
+                <p><a class="button" href="${dashboardUrl}">Open dashboard</a></p>
+              `}
+            </main>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/api/admin/review-project", async (req, res, next) => {
+    try {
+      const token = String(req.body?.token || "");
+      const decision = req.body?.decision === "reject" ? "reject" : "approve";
+      const modelIds = normalizeFormList(req.body?.modelIds);
+      if (!token) return res.status(400).send("Missing approval token.");
+      if (!modelIds.length) return res.redirect(303, `/api/admin/review-project?token=${encodeURIComponent(token)}`);
+
+      const reviewed = await reviewProjectModelsByToken({ token, modelIds, decision });
+      const statusLabel = decision === "reject" ? "rejected" : "published";
+      res.type("html").send(`
+        <!doctype html>
+        <html>
+          <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Files ${statusLabel}</title></head>
+          <body style="font-family:Arial,sans-serif;background:#f4f8ef;color:#162019;display:grid;min-height:100vh;place-items:center;margin:0;">
+            <main style="max-width:560px;padding:32px;border-radius:24px;background:white;box-shadow:0 20px 60px rgba(30,60,40,.14);">
+              <h1>${reviewed.length} file${reviewed.length === 1 ? "" : "s"} ${statusLabel}</h1>
+              <p>The selected project files were ${statusLabel}.</p>
+              <p><a href="/api/admin/review-project?token=${encodeURIComponent(token)}" style="color:#087b4b;font-weight:700;">Review remaining files</a></p>
+              <p><a href="${frontendUrl("")}" style="color:#087b4b;font-weight:700;">Open dashboard</a></p>
+            </main>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/api/admin/review-project/action", async (req, res, next) => {
+    try {
+      const token = typeof req.query.token === "string" ? req.query.token : "";
+      const decision = req.query.decision === "reject" ? "reject" : "approve";
+      if (!token) return res.status(400).send("Missing approval token.");
+
+      const reviewed = await reviewProjectModelsByToken({ token, modelIds: [], decision });
+      const statusLabel = decision === "reject" ? "rejected" : "published";
+      res.type("html").send(`
+        <!doctype html>
+        <html>
+          <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Project ${statusLabel}</title></head>
+          <body style="font-family:Arial,sans-serif;background:#f4f8ef;color:#162019;display:grid;min-height:100vh;place-items:center;margin:0;">
+            <main style="max-width:560px;padding:32px;border-radius:24px;background:white;box-shadow:0 20px 60px rgba(30,60,40,.14);">
+              <h1>Project files ${statusLabel}</h1>
+              <p>${reviewed.length} pending file${reviewed.length === 1 ? "" : "s"} were ${statusLabel}.</p>
+              <p><a href="${frontendUrl("")}" style="color:#087b4b;font-weight:700;">Open dashboard</a></p>
             </main>
           </body>
         </html>

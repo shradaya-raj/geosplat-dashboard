@@ -78,14 +78,15 @@ export async function createUploadSession(file, options = {}) {
   });
 }
 
-export async function completeUploadSession({ modelId, key, file }) {
+export async function completeUploadSession({ modelId, key, file, uploadBatch = null }) {
   return apiFetch("/api/uploads/complete", {
     method: "POST",
     body: JSON.stringify({
       modelId,
       r2Key: key,
       name: file.name,
-      filename: file.name
+      filename: file.name,
+      uploadBatch
     })
   });
 }

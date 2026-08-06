@@ -11,16 +11,19 @@ import {
   deleteModelsForProject,
   deleteProjectRecord,
   getProjectForOwner,
+  getProjectByApprovalToken,
   getSupabaseModelByApprovalToken,
   getSupabaseModelsByIds,
   getSupabaseShare,
   isSupabaseConfigured,
+  listPendingModelsForProject,
   listModelsForProject,
   listModelsForUserFromSupabase,
   listDemoModelsFromSupabase,
   listProjectsForUser,
   listPublishedModelsForUser,
-  updateModelRecord
+  updateModelRecord,
+  updateProjectRecord
 } from "./supabase-admin.js";
 import {
   createShare,
@@ -147,17 +150,29 @@ export async function resolveUploadProject({ user, projectId = null, projectName
   if (!useSupabase()) return null;
 
   if (projectId) {
-    const project = await getProjectForOwner(projectId, user.id);
+    let project = await getProjectForOwner(projectId, user.id);
     if (!project) {
       const error = new Error("Project was not found for this user.");
       error.status = 404;
       throw error;
     }
+
+    if (!project.metadata?.approvalToken) {
+      project = await updateProjectRecord(project.id, {
+        metadata: {
+          ...(project.metadata || {}),
+          approvalToken: nanoid(40),
+          approvalTokenCreatedAt: new Date().toISOString()
+        }
+      }, user.id);
+    }
+
     return projectRowToProject(project);
   }
 
   const resolvedName = String(projectName || "").trim() || "Untitled project";
   const slugBase = slugify(resolvedName) || "project";
+  const approvalToken = nanoid(40);
   const row = await createProjectRecord({
     owner_id: user.id,
     name: resolvedName.slice(0, 140),
@@ -165,7 +180,8 @@ export async function resolveUploadProject({ user, projectId = null, projectName
     status: "active",
     metadata: {
       createdByEmail: user.email,
-      source: "dashboard-upload"
+      source: "dashboard-upload",
+      approvalToken
     }
   });
 
@@ -193,6 +209,7 @@ export async function createUploadingModel({ user, filename, size, r2Key, projec
         ownerEmail: user.email,
         projectName: project?.name || null,
         projectSlug: project?.slug || null,
+        projectApprovalToken: project?.metadata?.approvalToken || null,
         assetTypeLabel: getAssetTypeLabel(resolvedAssetType),
         source: "r2-original"
       }
@@ -217,7 +234,7 @@ export async function createUploadingModel({ user, filename, size, r2Key, projec
   });
 }
 
-export async function markModelUploadComplete({ modelId, user, r2Key, objectInfo, name, filename }) {
+export async function markModelUploadComplete({ modelId, user, r2Key, objectInfo, name, filename, uploadBatch = null }) {
   const expectedPrefix = `users/${user.id}/`;
   if (!r2Key.startsWith(expectedPrefix)) {
     const error = new Error("Upload object is outside this user's storage folder.");
@@ -259,6 +276,8 @@ export async function markModelUploadComplete({ modelId, user, r2Key, objectInfo
         ownerEmail: user.email,
         projectName: existingModel.projectName,
         projectSlug: existingModel.projectSlug,
+        projectApprovalToken: existingModel.metadata?.projectApprovalToken || null,
+        uploadBatch,
         assetTypeLabel: getAssetTypeLabel(resolvedAssetType),
         source: "r2-original",
         contentType: objectInfo.contentType,
@@ -290,6 +309,55 @@ export async function markModelUploadComplete({ modelId, user, r2Key, objectInfo
 export async function listOwnedProjects(userId) {
   if (!useSupabase()) return [];
   return (await listProjectsForUser(userId)).map(projectRowToProject);
+}
+
+export async function getProjectApprovalContext(token) {
+  if (!useSupabase()) return null;
+
+  let project = await getProjectByApprovalToken(token);
+  let tokenModel = null;
+
+  if (!project) {
+    const row = await getSupabaseModelByApprovalToken(token);
+    tokenModel = row ? rowToModel(row) : null;
+    if (!row?.project_id || !row?.owner_id) return null;
+
+    const projectRows = await listProjectsForUser(row.owner_id);
+    project = projectRows.find((item) => item.id === row.project_id) || null;
+    if (!project) return null;
+  }
+
+  const projectModel = projectRowToProject(project);
+  const pendingRows = await listPendingModelsForProject({
+    projectId: project.id,
+    ownerId: project.owner_id
+  });
+
+  return {
+    project: projectModel,
+    models: pendingRows.map(rowToModel),
+    token,
+    tokenModel
+  };
+}
+
+export async function reviewProjectModelsByToken({ token, modelIds = [], decision }) {
+  if (!useSupabase()) return [];
+
+  const context = await getProjectApprovalContext(token);
+  if (!context) return [];
+
+  const requestedIds = new Set(modelIds);
+  const reviewable = context.models.filter((model) => !requestedIds.size || requestedIds.has(model.id));
+  const reviewed = [];
+
+  for (const model of reviewable) {
+    if (!model.approvalToken) continue;
+    const updated = await reviewModelByApprovalToken({ token: model.approvalToken, decision });
+    if (updated) reviewed.push(updated);
+  }
+
+  return reviewed;
 }
 
 export async function getProjectAssetsForDelete({ projectId, ownerId, assetType = null }) {

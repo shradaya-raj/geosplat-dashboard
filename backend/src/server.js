@@ -19,11 +19,12 @@ app.use(helmet({
 app.use(cors({
   origin: config.frontendOrigin,
   credentials: true,
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Accept", "Authorization"]
 }));
 
 app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: false, limit: "128kb" }));
 
 app.use(session({
   name: "gv.sid",

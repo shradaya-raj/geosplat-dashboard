@@ -1310,6 +1310,7 @@ async function uploadSelectedCloudFile() {
     let projectId = null;
     const totalFiles = selectedCloudUploadFiles.length;
     let processedFiles = 0;
+    const uploadBatchId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
     for (const [assetType, typeFiles] of filesByType.entries()) {
       const assetLabel = ASSET_TYPE_LABELS[assetType] || "data";
@@ -1346,7 +1347,12 @@ async function uploadSelectedCloudFile() {
         await completeUploadSession({
           modelId: uploadSession.modelId,
           key: uploadSession.key,
-          file
+          file,
+          uploadBatch: {
+            id: uploadBatchId,
+            index: processedFiles,
+            total: totalFiles
+          }
         });
 
         processedFiles += 1;
