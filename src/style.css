@@ -914,7 +914,15 @@ html[data-state="error"] .live-dot {
   display: none;
 }
 
-.upload-file-group > div {
+.upload-file-group-main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.upload-file-group-main > div {
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -930,6 +938,68 @@ html[data-state="error"] .live-dot {
   color: var(--muted);
   font-size: 12px;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-file-detail-toggle {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--ink);
+  background: var(--button-soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.upload-file-detail-toggle[hidden] {
+  display: none;
+}
+
+.upload-file-detail {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.upload-file-detail[hidden] {
+  display: none;
+}
+
+.upload-file-list {
+  display: grid;
+  gap: 6px;
+  max-height: 156px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.upload-file-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-solid) 62%, transparent);
+}
+
+.upload-file-list span {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-file-list small {
+  color: var(--muted);
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -1118,6 +1188,11 @@ code {
 
   .upload-type-grid,
   .upload-file-group {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-file-group-main,
+  .upload-file-list li {
     grid-template-columns: 1fr;
   }
 

@@ -201,36 +201,52 @@
               </fieldset>
               <div class="upload-file-groups">
                 <div class="upload-file-group" data-upload-file-group="gaussian_splatting">
-                  <div>
-                    <strong>Gaussian Splatting files</strong>
-                    <small data-upload-file-summary="gaussian_splatting">No files selected</small>
+                  <div class="upload-file-group-main">
+                    <div>
+                      <strong>Gaussian Splatting files</strong>
+                      <small data-upload-file-summary="gaussian_splatting">No files selected</small>
+                    </div>
+                    <button class="upload-file-detail-toggle" type="button" data-upload-file-toggle="gaussian_splatting" hidden>View files</button>
                   </div>
                   <label class="button button-secondary" for="cloud-upload-input-gaussian">Choose files</label>
                   <input id="cloud-upload-input-gaussian" type="file" accept=".ply,.splat,.ksplat,.spz" data-upload-file-input="gaussian_splatting" multiple hidden />
+                  <div class="upload-file-detail" data-upload-file-detail="gaussian_splatting" hidden></div>
                 </div>
                 <div class="upload-file-group" data-upload-file-group="mesh_3d" hidden>
-                  <div>
-                    <strong>3D Mesh files</strong>
-                    <small data-upload-file-summary="mesh_3d">No files selected</small>
+                  <div class="upload-file-group-main">
+                    <div>
+                      <strong>3D Mesh files</strong>
+                      <small data-upload-file-summary="mesh_3d">No files selected</small>
+                    </div>
+                    <button class="upload-file-detail-toggle" type="button" data-upload-file-toggle="mesh_3d" hidden>View files</button>
                   </div>
                   <label class="button button-secondary" for="cloud-upload-input-mesh">Choose files</label>
                   <input id="cloud-upload-input-mesh" type="file" accept=".obj,.fbx,.glb,.gltf,.stl,.dae,.3dm,.zip" data-upload-file-input="mesh_3d" multiple hidden />
+                  <div class="upload-file-detail" data-upload-file-detail="mesh_3d" hidden></div>
                 </div>
                 <div class="upload-file-group" data-upload-file-group="point_cloud" hidden>
-                  <div>
-                    <strong>Point Cloud files</strong>
-                    <small data-upload-file-summary="point_cloud">No files selected</small>
+                  <div class="upload-file-group-main">
+                    <div>
+                      <strong>Point Cloud files</strong>
+                      <small data-upload-file-summary="point_cloud">No files selected</small>
+                    </div>
+                    <button class="upload-file-detail-toggle" type="button" data-upload-file-toggle="point_cloud" hidden>View files</button>
                   </div>
                   <label class="button button-secondary" for="cloud-upload-input-pointcloud">Choose files</label>
                   <input id="cloud-upload-input-pointcloud" type="file" accept=".ply,.las,.laz,.pcd,.xyz,.pts,.e57,.zip" data-upload-file-input="point_cloud" multiple hidden />
+                  <div class="upload-file-detail" data-upload-file-detail="point_cloud" hidden></div>
                 </div>
                 <div class="upload-file-group" data-upload-file-group="orthomosaic" hidden>
-                  <div>
-                    <strong>Ortho / Orthomosaic files</strong>
-                    <small data-upload-file-summary="orthomosaic">No files selected</small>
+                  <div class="upload-file-group-main">
+                    <div>
+                      <strong>Ortho / Orthomosaic files</strong>
+                      <small data-upload-file-summary="orthomosaic">No files selected</small>
+                    </div>
+                    <button class="upload-file-detail-toggle" type="button" data-upload-file-toggle="orthomosaic" hidden>View files</button>
                   </div>
                   <label class="button button-secondary" for="cloud-upload-input-ortho">Choose files</label>
                   <input id="cloud-upload-input-ortho" type="file" accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg,.webp,.jp2,.zip" data-upload-file-input="orthomosaic" multiple hidden />
+                  <div class="upload-file-detail" data-upload-file-detail="orthomosaic" hidden></div>
                 </div>
               </div>
               <div class="upload-actions">

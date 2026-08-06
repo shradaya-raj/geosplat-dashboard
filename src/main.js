@@ -75,6 +75,14 @@ const uploadFileSummaries = new Map(
   [...document.querySelectorAll("[data-upload-file-summary]")]
     .map((element) => [element.dataset.uploadFileSummary, element])
 );
+const uploadFileDetails = new Map(
+  [...document.querySelectorAll("[data-upload-file-detail]")]
+    .map((element) => [element.dataset.uploadFileDetail, element])
+);
+const uploadFileDetailToggles = new Map(
+  [...document.querySelectorAll("[data-upload-file-toggle]")]
+    .map((element) => [element.dataset.uploadFileToggle, element])
+);
 const uploadProgress = document.querySelector("#upload-progress");
 const uploadFileName = document.querySelector("#upload-file-name");
 const uploadProgressBar = document.querySelector("#upload-progress-bar");
@@ -97,6 +105,7 @@ let pointModeEnabled = false;
 let activeLoadToken = 0;
 let loadingWatchdog = null;
 let selectedCloudUploadFiles = [];
+let selectedUploadFilesByType = new Map();
 let currentModelSource = "static";
 let modelRefreshTimer = null;
 let modelSelectEntries = [];
@@ -385,11 +394,8 @@ function getUploadFilesByType() {
   const selectedTypes = new Set(getSelectedUploadAssetTypes());
   const filesByType = new Map();
 
-  for (const input of uploadFileInputs) {
-    const assetType = input.dataset.uploadFileInput;
+  for (const [assetType, files] of selectedUploadFilesByType.entries()) {
     if (!selectedTypes.has(assetType)) continue;
-
-    const files = [...input.files];
     if (files.length) filesByType.set(assetType, files);
   }
 
@@ -404,19 +410,66 @@ function getUploadSelectionSummary() {
 }
 
 function updateUploadFileSummaries() {
-  for (const input of uploadFileInputs) {
-    const assetType = input.dataset.uploadFileInput;
-    const files = [...input.files];
+  const selectedTypes = new Set(getSelectedUploadAssetTypes());
+
+  for (const assetType of Object.keys(ASSET_TYPE_LABELS)) {
+    const files = selectedUploadFilesByType.get(assetType) || [];
     const bytes = files.reduce((sum, file) => sum + file.size, 0);
     const summary = uploadFileSummaries.get(assetType);
-    if (!summary) continue;
+    const detail = uploadFileDetails.get(assetType);
+    const toggle = uploadFileDetailToggles.get(assetType);
 
-    summary.textContent = files.length
-      ? `${files.length} file${files.length === 1 ? "" : "s"} • ${formatBytes(bytes)}`
-      : "No files selected";
+    if (summary) {
+      summary.textContent = files.length
+        ? `${files.length} file${files.length === 1 ? "" : "s"} • ${formatBytes(bytes)}`
+        : "No files selected";
+    }
+
+    if (toggle) {
+      toggle.hidden = files.length === 0;
+      toggle.textContent = detail?.hidden === false ? "Hide files" : "View files";
+    }
+
+    if (detail) {
+      detail.innerHTML = "";
+      detail.hidden = detail.hidden || files.length === 0 || !selectedTypes.has(assetType);
+
+      if (files.length) {
+        const list = document.createElement("ul");
+        list.className = "upload-file-list";
+
+        for (const file of files) {
+          const item = document.createElement("li");
+          const name = document.createElement("span");
+          const size = document.createElement("small");
+
+          name.textContent = file.name;
+          size.textContent = formatBytes(file.size);
+          item.append(name, size);
+          list.append(item);
+        }
+
+        detail.append(list);
+      }
+    }
   }
 
   selectedCloudUploadFiles = getUploadSelectionSummary().files;
+}
+
+function addUploadFiles(assetType, files) {
+  const existing = selectedUploadFilesByType.get(assetType) || [];
+  const nextFiles = [...existing];
+  const seen = new Set(existing.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+
+  for (const file of files) {
+    const fileKey = `${file.name}:${file.size}:${file.lastModified}`;
+    if (seen.has(fileKey)) continue;
+    nextFiles.push(file);
+    seen.add(fileKey);
+  }
+
+  selectedUploadFilesByType.set(assetType, nextFiles);
 }
 
 function updateUploadTypeVisibility() {
@@ -430,6 +483,7 @@ function updateUploadTypeVisibility() {
     if (!isVisible) {
       const input = uploadFileInputs.find((fileInputElement) => fileInputElement.dataset.uploadFileInput === assetType);
       if (input) input.value = "";
+      selectedUploadFilesByType.delete(assetType);
     }
   }
 
@@ -1303,6 +1357,7 @@ async function uploadSelectedCloudFile() {
     showToast(`${selectedCloudUploadFiles.length} file${selectedCloudUploadFiles.length === 1 ? "" : "s"} uploaded for approval.`);
     startModelRefreshPolling();
     selectedCloudUploadFiles = [];
+    selectedUploadFilesByType = new Map();
     for (const input of uploadFileInputs) input.value = "";
     updateUploadFileSummaries();
     refreshUploadControls();
@@ -1493,14 +1548,28 @@ for (const input of uploadFileInputs) {
     if (unsupported) {
       showToast(`${unsupported.name} is not supported for ${assetLabel}.`);
       input.value = "";
+      updateUploadFileSummaries();
+      refreshUploadControls();
+      return;
     }
 
+    addUploadFiles(assetType, files);
+    input.value = "";
     updateUploadFileSummaries();
     refreshUploadControls();
   });
 }
 for (const input of uploadAssetTypeInputs) {
   input.addEventListener("change", updateUploadTypeVisibility);
+}
+for (const [assetType, toggle] of uploadFileDetailToggles.entries()) {
+  toggle.addEventListener("click", () => {
+    const detail = uploadFileDetails.get(assetType);
+    if (!detail) return;
+
+    detail.hidden = !detail.hidden;
+    toggle.textContent = detail.hidden ? "View files" : "Hide files";
+  });
 }
 cloudUploadButton?.addEventListener("click", uploadSelectedCloudFile);
 uploadPanel.addEventListener("click", (event) => {
