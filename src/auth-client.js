@@ -49,7 +49,7 @@ export async function getBrowserSession() {
 
 export async function signInWithEmail(email) {
   const supabase = getSupabaseClient();
-  if (!supabase) throw new Error("Supabase Auth is not configured.");
+  if (!supabase) throw new Error("Secure sign-in is not configured.");
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
@@ -63,7 +63,7 @@ export async function signInWithEmail(email) {
 
 export async function signInWithPassword(email, password) {
   const supabase = getSupabaseClient();
-  if (!supabase) throw new Error("Supabase Auth is not configured.");
+  if (!supabase) throw new Error("Secure sign-in is not configured.");
 
   const { error } = await supabase.auth.signInWithPassword({
     email,
@@ -75,7 +75,7 @@ export async function signInWithPassword(email, password) {
 
 export async function signUpWithPassword(email, password) {
   const supabase = getSupabaseClient();
-  if (!supabase) throw new Error("Supabase Auth is not configured.");
+  if (!supabase) throw new Error("Secure sign-in is not configured.");
 
   const { error } = await supabase.auth.signUp({
     email,

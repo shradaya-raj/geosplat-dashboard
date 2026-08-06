@@ -277,6 +277,17 @@ html[data-state="error"] .live-dot {
   font-size: 16px;
 }
 
+.action-icon {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .profile-menu-wrap {
   position: relative;
 }
@@ -376,6 +387,13 @@ html[data-state="error"] .live-dot {
   color: var(--ink);
   text-decoration: none;
   background: color-mix(in srgb, var(--button-soft) 88%, transparent);
+}
+
+.button-danger {
+  color: #7a2115;
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--line));
+  background: linear-gradient(135deg, #ffe4df, color-mix(in srgb, var(--danger) 18%, var(--button-soft)));
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 .button-full {
@@ -758,6 +776,68 @@ html[data-state="error"] .live-dot {
   max-height: calc(100% - 48px);
   overflow: auto;
   padding: 30px;
+}
+
+.confirm-panel {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 50%;
+  width: min(520px, calc(100% - 40px));
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  padding: 30px;
+  background: color-mix(in srgb, var(--panel-strong) 92%, transparent);
+  backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+}
+
+.confirm-panel[hidden] {
+  display: none !important;
+}
+
+.confirm-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  border-radius: 20px;
+  color: color-mix(in srgb, var(--danger) 82%, var(--ink));
+  background:
+    radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.8), transparent 38%),
+    linear-gradient(135deg, #ffe4df, color-mix(in srgb, var(--danger) 20%, var(--panel-solid)));
+  box-shadow: 0 18px 34px color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.confirm-icon svg {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.confirm-copy > strong {
+  display: block;
+  color: var(--ink);
+  font-size: 23px;
+  letter-spacing: -0.035em;
+}
+
+.confirm-copy p {
+  max-width: 38rem;
+  color: var(--muted);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
 }
 
 .upload-copy > strong {
@@ -1169,7 +1249,8 @@ code {
 
   .panel-card,
   .viewer-card,
-  .upload-panel {
+  .upload-panel,
+  .confirm-panel {
     border-radius: 22px;
   }
 
@@ -1194,6 +1275,10 @@ code {
   .upload-file-group-main,
   .upload-file-list li {
     grid-template-columns: 1fr;
+  }
+
+  .confirm-actions {
+    display: grid;
   }
 
   .control-grid {

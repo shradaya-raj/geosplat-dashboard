@@ -23,7 +23,6 @@ import {
   getProjectApprovalContext,
   getModelsForShare,
   getModelsOwnedByUser,
-  getRepositoryMode,
   listOwnedProjects,
   listOwnedUserModels,
   listPublishedDemoModels,
@@ -210,9 +209,7 @@ export function createRouter() {
   router.get("/health", (req, res) => {
     res.json({
       ok: true,
-      service: "gaussian-viewer-backend",
-      mode: getRepositoryMode(),
-      r2Configured: isR2Configured()
+      service: "gaussian-viewer-backend"
     });
   });
 
@@ -304,7 +301,7 @@ export function createRouter() {
       }
 
       if (!isR2Configured()) {
-        return res.status(501).json({ error: "Cloudflare R2 storage is not configured." });
+        return res.status(501).json({ error: "Cloud upload storage is not ready yet." });
       }
 
       const project = await resolveUploadProject({
@@ -351,7 +348,7 @@ export function createRouter() {
     try {
       const modelId = String(req.body?.modelId || "");
       const r2Key = String(req.body?.r2Key || req.body?.key || "");
-      if (!modelId || !r2Key) return res.status(400).json({ error: "Missing R2 upload details." });
+      if (!modelId || !r2Key) return res.status(400).json({ error: "Missing upload details." });
 
       const info = await getObjectInfo(r2Key);
       const record = await markModelUploadComplete({

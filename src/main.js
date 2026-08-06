@@ -89,6 +89,12 @@ const uploadProgress = document.querySelector("#upload-progress");
 const uploadFileName = document.querySelector("#upload-file-name");
 const uploadProgressBar = document.querySelector("#upload-progress-bar");
 const uploadProgressLabel = document.querySelector("#upload-progress-label");
+const confirmPanel = document.querySelector("#confirm-panel");
+const confirmTitle = document.querySelector("#confirm-title");
+const confirmMessage = document.querySelector("#confirm-message");
+const confirmAccept = document.querySelector("#confirm-accept");
+const confirmCancel = document.querySelector("#confirm-cancel");
+const confirmCancelX = document.querySelector("#confirm-cancel-x");
 const toast = document.querySelector("#toast");
 const dropZone = document.querySelector("#drop-zone");
 const modelInfo = document.querySelector("#model-info");
@@ -263,7 +269,7 @@ function updateAccountUI(session = currentSession) {
 
   if (!isBackendEnabled()) {
     accountStatus.textContent = "Static viewer mode";
-    accountHint.textContent = "Private sign-in needs the backend/domain API. Public demo/hosted models are shown for now.";
+    accountHint.textContent = "Private sign-in needs the secure workspace API. Public demo/hosted models are shown for now.";
     accountAction.hidden = false;
     accountAction.href = "#backend-setup";
     accountAction.textContent = "Backend setup pending";
@@ -292,7 +298,7 @@ function updateAccountUI(session = currentSession) {
   accountStatus.textContent = "Not signed in";
   accountHint.textContent = isSupabaseAuthEnabled()
     ? "Sign in with email to view your private model workspace."
-    : "Add Supabase URL and anon key to enable real sign in.";
+    : "Connect secure sign-in to enable private workspaces.";
   const loginUrl = getLoginUrl();
   accountAction.hidden = false;
   accountAction.href = loginUrl || "#";
@@ -322,11 +328,54 @@ function hideUploadPanel() {
   uploadPanel.hidden = true;
 }
 
+function hideConfirmPanel() {
+  if (confirmPanel) confirmPanel.hidden = true;
+}
+
+function showConfirmDialog({
+  title = "Confirm action",
+  message = "Please confirm this action.",
+  acceptLabel = "Confirm",
+  danger = true
+} = {}) {
+  if (!confirmPanel || !confirmAccept || !confirmCancel || !confirmCancelX) {
+    return Promise.resolve(window.confirm(message));
+  }
+
+  confirmTitle.textContent = title;
+  confirmMessage.textContent = message;
+  confirmAccept.textContent = acceptLabel;
+  confirmAccept.classList.toggle("button-danger", danger);
+  confirmAccept.classList.toggle("button-primary", !danger);
+  confirmPanel.hidden = false;
+
+  return new Promise((resolve) => {
+    const finish = (value) => {
+      hideConfirmPanel();
+      confirmAccept.removeEventListener("click", accept);
+      confirmCancel.removeEventListener("click", cancel);
+      confirmCancelX.removeEventListener("click", cancel);
+      confirmPanel.removeEventListener("click", backdrop);
+      resolve(value);
+    };
+    const accept = () => finish(true);
+    const cancel = () => finish(false);
+    const backdrop = (event) => {
+      if (event.target === confirmPanel) finish(false);
+    };
+
+    confirmAccept.addEventListener("click", accept);
+    confirmCancel.addEventListener("click", cancel);
+    confirmCancelX.addEventListener("click", cancel);
+    confirmPanel.addEventListener("click", backdrop);
+  });
+}
+
 async function handleAccountAction() {
   if (!accountAction) return false;
 
   if (accountAction.getAttribute("aria-disabled") === "true") {
-    showToast("Connect Supabase Auth and backend API first.");
+    showToast("Connect secure sign-in first.");
     return false;
   }
 
@@ -1556,9 +1605,13 @@ async function deleteSelectedHostedFiles() {
     return;
   }
 
-  const confirmed = window.confirm(
-    `Delete ${selectedModels.length} selected file${selectedModels.length === 1 ? "" : "s"}?\n\nThis removes the database record and the stored R2 object.`
-  );
+  const fileLabel = `${selectedModels.length} selected file${selectedModels.length === 1 ? "" : "s"}`;
+  const confirmed = await showConfirmDialog({
+    title: `Delete ${fileLabel}?`,
+    message: "This will permanently remove the selected upload from your workspace. This action cannot be undone.",
+    acceptLabel: "Delete",
+    danger: true
+  });
   if (!confirmed) return;
 
   if (deleteSelectedButton) deleteSelectedButton.disabled = true;
@@ -1724,6 +1777,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     hideProfileMenu();
     hideUploadPanel();
+    hideConfirmPanel();
   }
 });
 

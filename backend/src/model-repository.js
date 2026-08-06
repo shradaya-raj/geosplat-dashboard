@@ -367,7 +367,7 @@ export async function getProjectAssetsForDelete({ projectId, ownerId, assetType 
 
 export async function deleteOwnedModel({ modelId, ownerId }) {
   if (!useSupabase()) {
-    const error = new Error("Persistent deletes require Supabase storage.");
+    const error = new Error("Permanent delete is not available in this workspace yet.");
     error.status = 501;
     throw error;
   }
@@ -378,7 +378,7 @@ export async function deleteOwnedModel({ modelId, ownerId }) {
 
 export async function deleteOwnedProjectAssets({ projectId, ownerId, assetType = null }) {
   if (!useSupabase()) {
-    const error = new Error("Persistent deletes require Supabase storage.");
+    const error = new Error("Permanent delete is not available in this workspace yet.");
     error.status = 501;
     throw error;
   }
@@ -389,7 +389,7 @@ export async function deleteOwnedProjectAssets({ projectId, ownerId, assetType =
 
 export async function deleteOwnedProject({ projectId, ownerId }) {
   if (!useSupabase()) {
-    const error = new Error("Persistent deletes require Supabase storage.");
+    const error = new Error("Permanent delete is not available in this workspace yet.");
     error.status = 501;
     throw error;
   }
