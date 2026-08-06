@@ -1695,6 +1695,11 @@ async function deleteSelectedHostedFiles() {
 
     activeModels = activeModels.filter((model) => !selectedModels.some((deleted) => deleted.id === model.id));
     if (!activeModels.length) activeModel = null;
+    const deletedProjectIds = new Set(projectIds);
+    const deletedStandaloneIds = new Set(standaloneModels.map((model) => model.id));
+    models = models.filter((model) => !deletedProjectIds.has(model.projectId) && !deletedStandaloneIds.has(model.id));
+    selectModelIndexes([]);
+    fillModelSelect();
     models = await loadManifest();
     fillModelSelect();
     if (!models.length) showEmptyState();

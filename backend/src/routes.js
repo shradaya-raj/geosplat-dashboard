@@ -699,6 +699,10 @@ export function createRouter() {
         projectId: req.params.id,
         ownerId: req.session.user.id
       });
+      await deleteOwnedProjectAssets({
+        projectId: req.params.id,
+        ownerId: req.session.user.id
+      });
       const project = await deleteOwnedProject({
         projectId: req.params.id,
         ownerId: req.session.user.id
