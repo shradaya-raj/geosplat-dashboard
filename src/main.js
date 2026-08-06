@@ -48,7 +48,7 @@ const ASSET_TYPE_LABELS = {
 const MAX_LOCAL_PREVIEW_BYTES = 350 * 1024 * 1024;
 const MAX_LOCAL_PLY_PREVIEW_BYTES = 150 * 1024 * 1024;
 const LARGE_HOSTED_MODEL_BYTES = 125 * 1024 * 1024;
-const MAX_ORTHO_PREVIEW_DIMENSION = 1536;
+const MAX_ORTHO_PREVIEW_DIMENSION = 4096;
 const STALLED_LOAD_WARNING_MS = 45000;
 const MODEL_REFRESH_INTERVAL_MS = 12000;
 let GaussianSplats3D;
@@ -1138,7 +1138,12 @@ async function loadPointCloudObject(model) {
   throw new Error(`${extension || "This point cloud format"} needs conversion before browser viewing.`);
 }
 
-function computePreviewSize(width, height, maxDimension = MAX_ORTHO_PREVIEW_DIMENSION) {
+function getMaxOrthoPreviewDimension() {
+  const gpuLimit = genericRenderer?.capabilities?.maxTextureSize || MAX_ORTHO_PREVIEW_DIMENSION;
+  return Math.max(512, Math.min(MAX_ORTHO_PREVIEW_DIMENSION, gpuLimit));
+}
+
+function computePreviewSize(width, height, maxDimension = getMaxOrthoPreviewDimension()) {
   const longest = Math.max(width, height, 1);
   const scale = Math.min(1, maxDimension / longest);
   return {
@@ -1201,35 +1206,81 @@ function findRasterRange(raster, bandCount, bandOffset) {
   return { min, max };
 }
 
+function getNormalizedRasterRgb(raster, sourceOffset, bandCount, ranges) {
+  if (bandCount >= 3) {
+    return [
+      normalizeRasterValue(raster[sourceOffset], ranges[0].min, ranges[0].max),
+      normalizeRasterValue(raster[sourceOffset + 1], ranges[1].min, ranges[1].max),
+      normalizeRasterValue(raster[sourceOffset + 2], ranges[2].min, ranges[2].max)
+    ];
+  }
+
+  const gray = normalizeRasterValue(raster[sourceOffset], ranges[0].min, ranges[0].max);
+  return [gray, gray, gray];
+}
+
+function detectEdgeNoDataMode(raster, width, height, bandCount, ranges) {
+  const samplePixels = [];
+  const stepX = Math.max(1, Math.floor(width / 512));
+  const stepY = Math.max(1, Math.floor(height / 512));
+
+  for (let x = 0; x < width; x += stepX) {
+    samplePixels.push(x, (height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y += stepY) {
+    samplePixels.push(y * width, y * width + width - 1);
+  }
+
+  let black = 0;
+  let white = 0;
+  let total = 0;
+  for (const pixel of samplePixels) {
+    const sourceOffset = pixel * bandCount;
+    const [red, green, blue] = getNormalizedRasterRgb(raster, sourceOffset, bandCount, ranges);
+    total += 1;
+    if (red <= 4 && green <= 4 && blue <= 4) black += 1;
+    if (red >= 251 && green >= 251 && blue >= 251) white += 1;
+  }
+
+  if (!total) return "";
+  if (black / total >= 0.18) return "black";
+  if (white / total >= 0.18) return "white";
+  return "";
+}
+
+function isTransparentNoDataPixel(red, green, blue, noDataMode) {
+  if (noDataMode === "black") return red <= 4 && green <= 4 && blue <= 4;
+  if (noDataMode === "white") return red >= 251 && green >= 251 && blue >= 251;
+  return false;
+}
+
 function rasterToTexture(raster, width, height, samplesPerPixel) {
   const bandCount = Math.max(1, Math.min(samplesPerPixel || 1, 4));
   const visibleBands = Math.min(bandCount, 3);
   const ranges = Array.from({ length: visibleBands }, (_, band) => findRasterRange(raster, bandCount, band));
+  const noDataMode = detectEdgeNoDataMode(raster, width, height, bandCount, ranges);
   const rgba = new Uint8Array(width * height * 4);
 
   for (let pixel = 0; pixel < width * height; pixel += 1) {
     const sourceOffset = pixel * bandCount;
     const targetOffset = pixel * 4;
+    const [red, green, blue] = getNormalizedRasterRgb(raster, sourceOffset, bandCount, ranges);
 
-    if (bandCount >= 3) {
-      rgba[targetOffset] = normalizeRasterValue(raster[sourceOffset], ranges[0].min, ranges[0].max);
-      rgba[targetOffset + 1] = normalizeRasterValue(raster[sourceOffset + 1], ranges[1].min, ranges[1].max);
-      rgba[targetOffset + 2] = normalizeRasterValue(raster[sourceOffset + 2], ranges[2].min, ranges[2].max);
-    } else {
-      const gray = normalizeRasterValue(raster[sourceOffset], ranges[0].min, ranges[0].max);
-      rgba[targetOffset] = gray;
-      rgba[targetOffset + 1] = gray;
-      rgba[targetOffset + 2] = gray;
-    }
+    rgba[targetOffset] = red;
+    rgba[targetOffset + 1] = green;
+    rgba[targetOffset + 2] = blue;
 
-    rgba[targetOffset + 3] = bandCount >= 4
+    const alpha = bandCount >= 4
       ? normalizeRasterValue(raster[sourceOffset + 3], 0, 255)
       : 255;
+    rgba[targetOffset + 3] = isTransparentNoDataPixel(red, green, blue, noDataMode) ? 0 : alpha;
   }
 
   const texture = new THREE.DataTexture(rgba, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(8, genericRenderer?.capabilities?.getMaxAnisotropy?.() || 1);
   texture.needsUpdate = true;
+  texture.userData.noDataMode = noDataMode;
   return texture;
 }
 
@@ -1258,12 +1309,19 @@ async function loadOrthoObject(model) {
       : previewSize.width / previewSize.height;
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(aspect, 1),
-      new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        side: THREE.DoubleSide,
+        transparent: true,
+        alphaTest: 0.01,
+        depthWrite: false
+      })
     );
     mesh.userData.orthoSourceWidth = sourceWidth;
     mesh.userData.orthoSourceHeight = sourceHeight;
     mesh.userData.orthoPreviewWidth = previewSize.width;
     mesh.userData.orthoPreviewHeight = previewSize.height;
+    mesh.userData.orthoNoDataMode = texture.userData.noDataMode;
     return mesh;
   } catch (error) {
     const reason = error?.message || "Convert it to web map tiles or a Cloud Optimized GeoTIFF preview.";
@@ -1302,6 +1360,7 @@ function getOrthoResolutionInfo() {
 
   const sourceResolutions = new Set();
   const previewResolutions = new Set();
+  const noDataModes = new Set();
   for (const object of orthoObjects) {
     const sourceResolution = formatPixelResolution(
       object.userData.orthoSourceWidth,
@@ -1313,6 +1372,7 @@ function getOrthoResolutionInfo() {
     );
     if (sourceResolution) sourceResolutions.add(sourceResolution);
     if (previewResolution) previewResolutions.add(previewResolution);
+    if (object.userData.orthoNoDataMode) noDataModes.add(object.userData.orthoNoDataMode);
   }
 
   const parts = [];
@@ -1325,6 +1385,9 @@ function getOrthoResolutionInfo() {
     parts.push(`preview ${previewResolutions.values().next().value}`);
   } else if (previewResolutions.size > 1) {
     parts.push(`${previewResolutions.size} preview resolutions`);
+  }
+  if (noDataModes.size === 1) {
+    parts.push(`${noDataModes.values().next().value} edge transparent`);
   }
   return parts;
 }
