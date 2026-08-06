@@ -27,6 +27,12 @@ const UPLOAD_EXTENSIONS_BY_TYPE = {
   point_cloud: [".ply", ".las", ".laz", ".pcd", ".xyz", ".pts", ".e57", ".zip"],
   orthomosaic: [".tif", ".tiff", ".geotiff", ".png", ".jpg", ".jpeg", ".webp", ".jp2", ".zip"]
 };
+const VIEWABLE_EXTENSIONS_BY_TYPE = {
+  mesh_3d: [".glb", ".gltf", ".obj", ".stl"],
+  gaussian_splatting: [".ply", ".splat", ".ksplat", ".spz"],
+  point_cloud: [".ply", ".pcd"],
+  orthomosaic: [".png", ".jpg", ".jpeg", ".webp"]
+};
 const ASSET_TYPE_LABELS = {
   mesh_3d: "3D Mesh",
   gaussian_splatting: "Gaussian Splatting",
@@ -40,6 +46,12 @@ const STALLED_LOAD_WARNING_MS = 45000;
 const MODEL_REFRESH_INTERVAL_MS = 12000;
 let GaussianSplats3D;
 let THREE;
+let OrbitControls;
+let GLTFLoader;
+let OBJLoader;
+let PCDLoader;
+let PLYLoader;
+let STLLoader;
 let sceneFormatByExtension = {};
 
 const connectionLabel = document.querySelector("#connection-label");
@@ -103,6 +115,11 @@ const accountHint = document.querySelector("#account-hint");
 const accountAction = document.querySelector("#account-action");
 
 let viewer;
+let genericRenderer;
+let genericScene;
+let genericCamera;
+let genericControls;
+let genericAnimationFrame = 0;
 let models = [];
 let currentSession = { authenticated: false, user: null, mode: "static" };
 let activeModel = null;
@@ -136,6 +153,36 @@ async function loadViewerLibraries() {
     ".ksplat": GaussianSplats3D.SceneFormat.KSplat,
     ".spz": GaussianSplats3D.SceneFormat.Spz
   };
+}
+
+async function loadGenericViewerLibraries() {
+  if (THREE && OrbitControls && GLTFLoader && OBJLoader && PCDLoader && PLYLoader && STLLoader) return;
+
+  const [
+    threeModule,
+    orbitModule,
+    gltfModule,
+    objModule,
+    pcdModule,
+    plyModule,
+    stlModule
+  ] = await Promise.all([
+    import("three"),
+    import("three/addons/controls/OrbitControls.js"),
+    import("three/addons/loaders/GLTFLoader.js"),
+    import("three/addons/loaders/OBJLoader.js"),
+    import("three/addons/loaders/PCDLoader.js"),
+    import("three/addons/loaders/PLYLoader.js"),
+    import("three/addons/loaders/STLLoader.js")
+  ]);
+
+  THREE = threeModule;
+  OrbitControls = orbitModule.OrbitControls;
+  GLTFLoader = gltfModule.GLTFLoader;
+  OBJLoader = objModule.OBJLoader;
+  PCDLoader = pcdModule.PCDLoader;
+  PLYLoader = plyModule.PLYLoader;
+  STLLoader = stlModule.STLLoader;
 }
 
 function applyTheme(theme) {
@@ -701,6 +748,31 @@ function cleanObjectUrl() {
   activeObjectUrl = null;
 }
 
+function disposeGenericViewer() {
+  if (genericAnimationFrame) {
+    window.cancelAnimationFrame(genericAnimationFrame);
+    genericAnimationFrame = 0;
+  }
+
+  if (genericScene) {
+    genericScene.traverse((object) => {
+      object.geometry?.dispose?.();
+      const materials = Array.isArray(object.material) ? object.material : [object.material].filter(Boolean);
+      for (const material of materials) {
+        material.map?.dispose?.();
+        material.dispose?.();
+      }
+    });
+  }
+
+  genericControls?.dispose?.();
+  genericRenderer?.dispose?.();
+  genericRenderer = null;
+  genericScene = null;
+  genericCamera = null;
+  genericControls = null;
+}
+
 function clearViewerScene() {
   activeLoadToken += 1;
   clearLoadingWatchdog();
@@ -708,6 +780,7 @@ function clearViewerScene() {
     viewer.dispose();
     viewer = null;
   }
+  disposeGenericViewer();
   viewerElement.replaceChildren();
   activeModels = [];
   activeModel = null;
@@ -727,6 +800,7 @@ function resetViewer() {
     viewer.dispose();
     viewer = null;
   }
+  disposeGenericViewer();
 
   viewerElement.replaceChildren();
 
@@ -748,11 +822,187 @@ function resetViewer() {
   });
 }
 
+function setupGenericViewer() {
+  disposeGenericViewer();
+  viewerElement.replaceChildren();
+
+  genericScene = new THREE.Scene();
+  genericScene.background = null;
+  genericCamera = new THREE.PerspectiveCamera(
+    55,
+    Math.max(viewerElement.clientWidth, 1) / Math.max(viewerElement.clientHeight, 1),
+    0.01,
+    100000
+  );
+  genericCamera.position.set(3, -4, 2.6);
+
+  genericRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  genericRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  genericRenderer.setSize(viewerElement.clientWidth || 800, viewerElement.clientHeight || 500);
+  genericRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  viewerElement.append(genericRenderer.domElement);
+
+  genericControls = new OrbitControls(genericCamera, genericRenderer.domElement);
+  genericControls.enableDamping = true;
+  genericControls.dampingFactor = 0.08;
+  genericControls.screenSpacePanning = true;
+
+  const ambient = new THREE.HemisphereLight(0xffffff, 0x26352f, 2.2);
+  const key = new THREE.DirectionalLight(0xffffff, 2.4);
+  key.position.set(4, -6, 7);
+  genericScene.add(ambient, key);
+
+  const animate = () => {
+    if (!genericRenderer || !genericScene || !genericCamera) return;
+    genericControls?.update?.();
+    genericRenderer.render(genericScene, genericCamera);
+    genericAnimationFrame = window.requestAnimationFrame(animate);
+  };
+  animate();
+}
+
+function resizeGenericViewer() {
+  if (!genericRenderer || !genericCamera) return;
+  const width = viewerElement.clientWidth || 800;
+  const height = viewerElement.clientHeight || 500;
+  genericCamera.aspect = width / height;
+  genericCamera.updateProjectionMatrix();
+  genericRenderer.setSize(width, height);
+}
+
+function fitGenericCameraToScene() {
+  if (!genericScene || !genericCamera || !genericControls) return;
+  const box = new THREE.Box3().setFromObject(genericScene);
+  if (box.isEmpty()) return;
+
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  box.getCenter(center);
+  box.getSize(size);
+  const radius = Math.max(size.length() * 0.55, 1);
+  const distance = radius / Math.sin((genericCamera.fov * Math.PI / 180) / 2);
+
+  genericCamera.position.copy(center).add(new THREE.Vector3(distance * 0.65, -distance, distance * 0.45));
+  genericCamera.near = Math.max(distance / 1000, 0.01);
+  genericCamera.far = Math.max(distance * 20, 1000);
+  genericCamera.lookAt(center);
+  genericCamera.updateProjectionMatrix();
+  genericControls.target.copy(center);
+  genericControls.update();
+}
+
+function applyCommonObjectStyle(object, model, index, total) {
+  object.name = model.name || `Asset ${index + 1}`;
+  if (!model.position && total > 1 && model.assetType === "orthomosaic") {
+    object.position.x = (index - (total - 1) / 2) * 1.15;
+  }
+  return object;
+}
+
+async function loadMeshObject(model) {
+  const url = modelPathToUrl(model.path);
+  const extension = getFileExtension(model.filename || model.path || "");
+
+  if (extension === ".glb" || extension === ".gltf") {
+    const result = await new GLTFLoader().loadAsync(url);
+    return result.scene;
+  }
+
+  if (extension === ".obj") return new OBJLoader().loadAsync(url);
+
+  if (extension === ".stl") {
+    const geometry = await new STLLoader().loadAsync(url);
+    geometry.computeVertexNormals();
+    return new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        color: 0xd9e5dc,
+        roughness: 0.78,
+        metalness: 0.05
+      })
+    );
+  }
+
+  throw new Error(`${extension || "This mesh format"} is stored but not viewable yet.`);
+}
+
+async function loadPointCloudObject(model) {
+  const url = modelPathToUrl(model.path);
+  const extension = getFileExtension(model.filename || model.path || "");
+
+  if (extension === ".pcd") {
+    const points = await new PCDLoader().loadAsync(url);
+    if (points.material) {
+      points.material.size = Math.max(points.material.size || 0.01, 0.015);
+      points.material.sizeAttenuation = true;
+    }
+    return points;
+  }
+
+  if (extension === ".ply") {
+    const geometry = await new PLYLoader().loadAsync(url);
+    geometry.computeBoundingSphere();
+    const hasColor = Boolean(geometry.getAttribute("color"));
+    return new THREE.Points(
+      geometry,
+      new THREE.PointsMaterial({
+        size: 0.025,
+        vertexColors: hasColor,
+        color: hasColor ? 0xffffff : 0x83e2a6,
+        sizeAttenuation: true
+      })
+    );
+  }
+
+  throw new Error(`${extension || "This point cloud format"} needs conversion before browser viewing.`);
+}
+
+async function loadOrthoObject(model) {
+  const extension = getFileExtension(model.filename || model.path || "");
+  if (!VIEWABLE_EXTENSIONS_BY_TYPE.orthomosaic.includes(extension)) {
+    throw new Error(`${extension || "This ortho format"} needs tile conversion before browser viewing.`);
+  }
+
+  const texture = await new THREE.TextureLoader().loadAsync(modelPathToUrl(model.path));
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const aspect = texture.image?.width && texture.image?.height
+    ? texture.image.width / texture.image.height
+    : 1;
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(aspect, 1),
+    new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
+  );
+}
+
+async function loadGenericAssetObject(model, index, total) {
+  const assetType = model.assetType || "mesh_3d";
+  const object = assetType === "mesh_3d"
+    ? await loadMeshObject(model)
+    : assetType === "point_cloud"
+      ? await loadPointCloudObject(model)
+      : await loadOrthoObject(model);
+
+  return applyCommonObjectStyle(object, model, index, total);
+}
+
 function getLoadedSplatCount() {
   return viewer?.getSplatMesh?.()?.getSplatCount?.() ?? 0;
 }
 
 function updateModelInfo(model = activeModel, frame = lastFrame) {
+  if (activeViewerAssetType !== "gaussian_splatting") {
+    const typeLabel = ASSET_TYPE_LABELS[activeViewerAssetType] || "Data";
+    const infoParts = [
+      model?.name || getModelDisplayName(activeModels) || "Loaded data",
+      typeLabel
+    ];
+    if (activeModels.length > 1) infoParts.push(`${activeModels.length} files`);
+    modelInfo.textContent = infoParts.join(" · ");
+    modelInfo.hidden = false;
+    refreshDownloadButton();
+    return;
+  }
+
   const splatCount = frame?.splatCount ?? getLoadedSplatCount();
   const radius = frame?.radius;
   const infoParts = [
@@ -884,8 +1134,15 @@ function normalizeManifest(rawManifest) {
       const name = model.name || model.title || `Model ${index + 1}`;
       const path = model.path || model.url;
       const filename = model.filename || path?.split("/").pop() || name;
-      const extension = getExtensionFromPath(filename || path || "");
+      const extension = getFileExtension(filename || path || "");
       const progressiveDefault = extension === ".splat" || extension === ".ksplat";
+      const normalizedAssetType = model.assetType || "gaussian_splatting";
+      const normalizedModel = {
+        path,
+        filename,
+        status: model.status || "published",
+        assetType: normalizedAssetType
+      };
 
       return {
         id: model.id || model.modelId || model.slug || slugify(name || path),
@@ -901,10 +1158,10 @@ function normalizeManifest(rawManifest) {
         projectSlug: model.projectSlug,
         projectTotalAssets: model.projectTotalAssets,
         projectApprovedAssets: model.projectApprovedAssets,
-        assetType: model.assetType || "gaussian_splatting",
-        assetTypeLabel: model.assetTypeLabel || ASSET_TYPE_LABELS[model.assetType] || "Gaussian Splatting",
-        status: model.status || "published",
-        canLoad: model.canLoad ?? Boolean(path),
+        assetType: normalizedAssetType,
+        assetTypeLabel: model.assetTypeLabel || ASSET_TYPE_LABELS[normalizedAssetType] || "Gaussian Splatting",
+        status: normalizedModel.status,
+        canLoad: model.canLoad === false ? false : isBrowserViewableAsset(normalizedModel),
         ownerId: model.ownerId,
         ownerEmail: model.ownerEmail,
         isDemo: Boolean(model.isDemo || model.demo),
@@ -927,9 +1184,23 @@ function modelPathToUrl(path) {
   }
 }
 
-function getExtensionFromPath(path) {
+function getFileExtension(path) {
   const cleanPath = path.split("?")[0].split("#")[0].toLowerCase();
-  return SUPPORTED_EXTENSIONS.find((extension) => cleanPath.endsWith(extension));
+  const filename = cleanPath.split("/").pop() || cleanPath;
+  const match = filename.match(/\.[a-z0-9]+$/i);
+  return match ? match[0] : "";
+}
+
+function getExtensionFromPath(path) {
+  const extension = getFileExtension(path);
+  return SUPPORTED_EXTENSIONS.includes(extension) ? extension : undefined;
+}
+
+function isBrowserViewableAsset(model) {
+  if (!model?.path || model.status !== "published") return false;
+  const assetType = model.assetType || "gaussian_splatting";
+  const extension = getFileExtension(model.filename || model.path || "");
+  return Boolean((VIEWABLE_EXTENSIONS_BY_TYPE[assetType] || []).includes(extension));
 }
 
 function getSceneFormat(model) {
@@ -985,7 +1256,7 @@ function normalizeProjectsToManifest(projects = []) {
         projectSlug: project.slug,
         projectTotalAssets: totalAssets,
         projectApprovedAssets: approvedAssets,
-        canLoad: Boolean(asset.canLoad && asset.path && asset.assetType === "gaussian_splatting")
+        canLoad: Boolean(asset.canLoad && isBrowserViewableAsset(asset))
       });
     }
   }
@@ -1106,7 +1377,7 @@ function fillProjectTypeSelect() {
 
   const allOption = document.createElement("option");
   allOption.value = "all";
-  allOption.textContent = "All viewable Gaussian blocks";
+  allOption.textContent = "All Gaussian blocks";
   projectTypeSelect.append(allOption);
 
   for (const assetType of getAssetTypeOrder()) {
@@ -1479,9 +1750,76 @@ async function loadHostedModel(index) {
   selectModelIndexes([index]);
   loadedProjectEntry = getCombinedSelectedProjectEntry();
   activeViewerAssetType = model.assetType || "gaussian_splatting";
-  await loadModel(model, modelPathToUrl(model.path));
+  if (activeViewerAssetType === "gaussian_splatting") {
+    await loadModel(model, modelPathToUrl(model.path));
+  } else {
+    await loadGenericDataModels([model], activeViewerAssetType);
+  }
   if (loadedProjectEntry) renderViewerTypeSwitcher(loadedProjectEntry, activeViewerAssetType);
   updateShareUrl(model);
+}
+
+async function loadGenericDataModels(selectedModels, assetType) {
+  activeViewerAssetType = assetType;
+  activeModels = selectedModels;
+  activeModel = {
+    name: getModelDisplayName(selectedModels),
+    size: getTotalModelSize(selectedModels),
+    assetType
+  };
+
+  const loadToken = ++activeLoadToken;
+  const typeLabel = ASSET_TYPE_LABELS[assetType] || "Data";
+  const sizeHint = activeModel.size ? ` • ${formatBytes(activeModel.size)}` : "";
+  hideEmptyState();
+  hideReadyState();
+  showLoading(`Loading ${typeLabel}`, `${activeModel.name}${sizeHint}`);
+  const markProgress = startLoadingWatchdog(activeModel, loadToken);
+
+  try {
+    await loadGenericViewerLibraries();
+    if (loadToken !== activeLoadToken) return;
+    setupGenericViewer();
+    frameButton.disabled = false;
+    pointModeButton.disabled = true;
+    modelInfo.hidden = true;
+    lastFrame = null;
+    pointModeEnabled = false;
+
+    for (const [index, model] of selectedModels.entries()) {
+      if (loadToken !== activeLoadToken) return;
+      const percent = Math.round((index / Math.max(selectedModels.length, 1)) * 100);
+      const detail = `Reading ${index + 1}/${selectedModels.length} • ${model.name}`;
+      setModelLoadProgress(percent);
+      markProgress(detail);
+      setStatus(`Loading ${typeLabel}`, detail, "loading");
+      const object = await loadGenericAssetObject(model, index, selectedModels.length);
+      genericScene.add(object);
+    }
+
+    if (loadToken !== activeLoadToken) return;
+    setModelLoadProgress(100);
+    resizeGenericViewer();
+    fitGenericCameraToScene();
+    updateModelInfo(activeModel);
+    setStatus("Live", `${activeModel.name} • ${typeLabel}`, "ready");
+    updateShareUrl(selectedModels);
+    if (loadedProjectEntry) renderViewerTypeSwitcher(loadedProjectEntry, activeViewerAssetType);
+    hideLoading();
+  } catch (error) {
+    if (loadToken !== activeLoadToken) return;
+    clearLoadingWatchdog();
+    console.error(error);
+    loadingPanel.classList.add("is-error");
+    setStatus(
+      `${typeLabel} failed`,
+      error?.message || "This file may need conversion before browser viewing.",
+      "error"
+    );
+    showToast(error?.message || `Could not load ${typeLabel}.`);
+  } finally {
+    refreshDownloadButton();
+  }
 }
 
 async function loadSelectedHostedModels() {
@@ -1522,6 +1860,11 @@ async function loadSelectedHostedModels() {
 
   loadedProjectEntry = selectedEntry;
   activeViewerAssetType = renderAssetType;
+
+  if (renderAssetType !== "gaussian_splatting") {
+    await loadGenericDataModels(selectedModels, renderAssetType);
+    return;
+  }
 
   if (selectedModels.length === 1) {
     await loadHostedModel(loadableIndexes[0]);
@@ -2074,6 +2417,8 @@ window.addEventListener("drop", (event) => {
 window.addEventListener("focus", () => {
   refreshHostedModels({ silent: true });
 });
+
+window.addEventListener("resize", resizeGenericViewer, { passive: true });
 
 window.addEventListener("click", () => {
   hideProfileMenu();
