@@ -8,6 +8,7 @@ import {
   getOwnerDownloadUrl,
   getSession,
   getUserModels,
+  getUserProjects,
   uploadFileToSignedUrl
 } from "./api.js";
 import {
@@ -67,6 +68,7 @@ const profileMenu = document.querySelector("#profile-menu");
 const uploadPanel = document.querySelector("#upload-panel");
 const closeUploadPanel = document.querySelector("#close-upload-panel");
 const cloudUploadButton = document.querySelector("#cloud-upload-button");
+const waitUploadButton = document.querySelector("#wait-upload-button");
 const uploadProjectName = document.querySelector("#upload-project-name");
 const uploadAssetTypeInputs = [...document.querySelectorAll("[data-upload-asset-type]")];
 const uploadFileInputs = [...document.querySelectorAll("[data-upload-file-input]")];
@@ -109,6 +111,7 @@ let selectedUploadFilesByType = new Map();
 let currentModelSource = "static";
 let modelRefreshTimer = null;
 let modelSelectEntries = [];
+let notifiedPublishedModelIds = new Set();
 
 async function loadViewerLibraries() {
   if (GaussianSplats3D && THREE) return;
@@ -840,6 +843,51 @@ function getSceneFormat(model) {
   return extension ? sceneFormatByExtension[extension] : undefined;
 }
 
+function normalizeProjectsToManifest(projects = []) {
+  const projectModels = [];
+
+  for (const project of projects) {
+    const assetsByType = project.assetsByType || {};
+    const assets = Object.values(assetsByType)
+      .flatMap((group) => Array.isArray(group?.files) ? group.files : []);
+    const totalAssets = assets.length;
+    const approvedAssets = assets.filter((asset) => asset.status === "published").length;
+
+    if (!assets.length) {
+      projectModels.push({
+        id: `project:${project.id}`,
+        name: project.name,
+        slug: project.slug,
+        projectId: project.id,
+        projectName: project.name,
+        projectSlug: project.slug,
+        status: project.status || "active",
+        canLoad: false,
+        projectTotalAssets: 0,
+        projectApprovedAssets: 0
+      });
+      continue;
+    }
+
+    for (const asset of assets) {
+      projectModels.push({
+        ...asset,
+        id: asset.id || `${project.id}:${asset.filename || asset.name}`,
+        name: asset.name || asset.filename || project.name,
+        slug: asset.slug || slugify(asset.name || asset.filename || project.name),
+        projectId: project.id,
+        projectName: project.name,
+        projectSlug: project.slug,
+        projectTotalAssets: totalAssets,
+        projectApprovedAssets: approvedAssets,
+        canLoad: Boolean(asset.canLoad && asset.path && asset.assetType === "gaussian_splatting")
+      });
+    }
+  }
+
+  return normalizeManifest(projectModels);
+}
+
 function getProjectStatusSummary(entry) {
   const statusCounts = entry.indexes.reduce((counts, index) => {
     const status = models[index]?.status || "published";
@@ -858,6 +906,26 @@ function getProjectStatusSummary(entry) {
   }
 
   return "• Not ready";
+}
+
+function getProjectApprovalSummary(entry) {
+  const statusCounts = entry.indexes.reduce((counts, index) => {
+    const status = models[index]?.status || "published";
+    counts[status] = (counts[status] || 0) + 1;
+    return counts;
+  }, {});
+  const totalAssets = entry.totalAssets ?? entry.indexes.length;
+  const approvedAssets = entry.approvedAssets ?? entry.indexes.filter((index) => models[index]?.status === "published").length;
+  const approvedRatio = `${approvedAssets}/${Math.max(totalAssets, 1)} approved`;
+
+  if (totalAssets > 0 && approvedAssets === totalAssets) return `✓ Ready • ${approvedRatio}`;
+  if (approvedAssets > 0) return `◐ Partial • ${approvedRatio}`;
+  if (statusCounts.pending) return `⏳ Pending • ${approvedRatio}`;
+  if (statusCounts.processing) return `⚙ Processing • ${approvedRatio}`;
+  if (statusCounts.uploading) return `⇧ Uploading • ${approvedRatio}`;
+  if (statusCounts.rejected) return `⚠ Rejected • ${approvedRatio}`;
+
+  return `• Not ready • ${approvedRatio}`;
 }
 
 function fillModelSelect() {
@@ -884,19 +952,23 @@ function fillModelSelect() {
       grouped.set(key, {
         label: model.projectName || model.name,
         indexes: [],
-        size: 0
+        size: 0,
+        totalAssets: model.projectTotalAssets || 0,
+        approvedAssets: model.projectApprovedAssets || 0
       });
     }
     const entry = grouped.get(key);
     entry.indexes.push(index);
     entry.size += Number(model.size || 0);
+    entry.totalAssets = Math.max(entry.totalAssets || 0, model.projectTotalAssets || 0);
+    entry.approvedAssets = Math.max(entry.approvedAssets || 0, model.projectApprovedAssets || 0);
   }
 
   for (const entry of grouped.values()) {
     modelSelectEntries.push(entry);
     const option = document.createElement("option");
     option.value = String(modelSelectEntries.length - 1);
-    option.textContent = `${entry.label} — ${getProjectStatusSummary(entry)}`;
+    option.textContent = `${entry.label} — ${getProjectApprovalSummary(entry)}`;
     modelSelect.append(option);
   }
 
@@ -913,11 +985,22 @@ function modelsChanged(nextModels) {
 
   return nextModels.some((model, index) => {
     const current = models[index];
+    const nextPath = model.path?.split("?")[0] || "";
+    const currentPath = current?.path?.split("?")[0] || "";
     return model.id !== current?.id
-      || model.path !== current?.path
+      || nextPath !== currentPath
       || model.name !== current?.name
       || model.status !== current?.status;
   });
+}
+
+function getPublishedModelIds(modelList = []) {
+  return new Set(
+    modelList
+      .filter((model) => model.status === "published")
+      .map((model) => model.id || model.slug || model.name)
+      .filter(Boolean)
+  );
 }
 
 async function refreshHostedModels({ silent = true } = {}) {
@@ -933,6 +1016,9 @@ async function refreshHostedModels({ silent = true } = {}) {
 
   if (!nextModels || !modelsChanged(nextModels)) return;
 
+  const nextPublishedIds = getPublishedModelIds(nextModels);
+  const newlyPublishedIds = [...nextPublishedIds].filter((id) => !notifiedPublishedModelIds.has(id));
+
   const previousSelection = getSelectedModelIndexes()
     .map((index) => models[index]?.id || models[index]?.slug)
     .filter(Boolean);
@@ -947,8 +1033,12 @@ async function refreshHostedModels({ silent = true } = {}) {
 
   if (!activeModels.length && models.length) {
     showReadyState();
-    showToast("A newly approved model is ready.");
+    if (newlyPublishedIds.length) {
+      showToast(`${newlyPublishedIds.length} newly approved file${newlyPublishedIds.length === 1 ? "" : "s"} ready.`);
+    }
   }
+
+  notifiedPublishedModelIds = new Set([...notifiedPublishedModelIds, ...nextPublishedIds]);
 }
 
 function startModelRefreshPolling() {
@@ -977,6 +1067,20 @@ function selectModelIndexes(indexes) {
 }
 
 async function loadManifest() {
+  const shareToken = new URLSearchParams(window.location.search).get("share");
+
+  if (!shareToken && currentSession.authenticated) {
+    const projectsPayload = await getUserProjects().catch((error) => {
+      console.warn("Project API unavailable; falling back to model list.", error);
+      return null;
+    });
+
+    if (projectsPayload?.projects) {
+      currentModelSource = "user";
+      return normalizeProjectsToManifest(projectsPayload.projects);
+    }
+  }
+
   const userModelsPayload = await getUserModels().catch((error) => {
     console.warn("User model API unavailable; falling back to static manifest.", error);
     return null;
@@ -1544,6 +1648,11 @@ themeToggle?.addEventListener("click", () => {
 });
 uploadHelpButton.addEventListener("click", showUploadPanel);
 closeUploadPanel.addEventListener("click", hideUploadPanel);
+waitUploadButton?.addEventListener("click", () => {
+  hideUploadPanel();
+  showReadyState();
+  showToast("Upload can finish approval in the background.");
+});
 for (const input of uploadFileInputs) {
   input.addEventListener("change", () => {
     const assetType = input.dataset.uploadFileInput;
@@ -1626,6 +1735,7 @@ async function startDashboard() {
     showLoading("Preparing viewer", "Looking for self-hosted models...");
     await withTimeout(refreshSession(), 12000, "Session check timed out.");
     models = await withTimeout(loadManifest(), 15000, "Model list check timed out.");
+    notifiedPublishedModelIds = getPublishedModelIds(models);
     fillModelSelect();
     startModelRefreshPolling();
 

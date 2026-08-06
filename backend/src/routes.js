@@ -269,8 +269,17 @@ export function createRouter() {
   router.get("/api/projects", requireAuth, async (req, res, next) => {
     try {
       const projects = await listOwnedProjects(req.session.user.id);
+      const signedProjects = [];
+
+      for (const project of projects) {
+        signedProjects.push({
+          ...project,
+          assets: await withSignedModelUrls(project.assets || [])
+        });
+      }
+
       res.json({
-        projects: projects.map(publicProject),
+        projects: signedProjects.map(publicProject),
         assetTypes: ASSET_TYPES
       });
     } catch (error) {
