@@ -22,7 +22,15 @@ async function apiFetch(path, options = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
+    let message = `API request failed: ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (payload?.error) message = payload.error;
+    } catch {
+      const text = await response.text().catch(() => "");
+      if (text) message = text.slice(0, 220);
+    }
+    throw new Error(message);
   }
 
   return response.json();

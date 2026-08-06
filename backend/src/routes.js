@@ -96,8 +96,6 @@ function publicModel(model) {
     projectSlug: model.projectSlug,
     assetType: model.assetType,
     assetTypeLabel: model.assetTypeLabel,
-    ownerUserId: model.ownerUserId,
-    ownerEmail: model.ownerEmail,
     status: model.status,
     canLoad: Boolean((model.path || model.r2Key) && model.status === "published"),
     isDemo: Boolean(model.isDemo),
@@ -146,11 +144,20 @@ function publicProject(project) {
 
 async function removeStoredObjects(models) {
   if (!isR2Configured()) return;
+  const failures = [];
+
   for (const model of models) {
     if (!model?.r2Key) continue;
     await deleteObject(model.r2Key).catch((error) => {
       console.error(`R2 delete failed for ${model.r2Key}.`, error);
+      failures.push(model.r2Key);
     });
+  }
+
+  if (failures.length) {
+    const error = new Error(`Could not remove ${failures.length} stored file${failures.length === 1 ? "" : "s"}.`);
+    error.status = 502;
+    throw error;
   }
 }
 
@@ -667,14 +674,16 @@ export function createRouter() {
 
   router.delete("/api/models/:id", requireAuth, async (req, res, next) => {
     try {
-      const model = await deleteOwnedModel({
+      const [model] = await getModelsOwnedByUser([req.params.id], req.session.user.id);
+      if (!model) return res.status(404).json({ error: "File was not found for this owner." });
+
+      await removeStoredObjects([model]);
+      const deletedModel = await deleteOwnedModel({
         modelId: req.params.id,
         ownerId: req.session.user.id
       });
 
-      if (!model) return res.status(404).json({ error: "File was not found for this owner." });
-      await removeStoredObjects([model]);
-      res.json({ ok: true, deleted: { modelId: model.id, r2Key: model.r2Key } });
+      res.json({ ok: true, deleted: { modelId: deletedModel?.id || model.id } });
     } catch (error) {
       next(error);
     }
@@ -683,19 +692,25 @@ export function createRouter() {
   router.delete("/api/projects/:id/types/:assetType", requireAuth, async (req, res, next) => {
     try {
       const assetType = normalizeAssetType(req.params.assetType);
-      const models = await deleteOwnedProjectAssets({
+      const models = await getProjectAssetsForDelete({
+        projectId: req.params.id,
+        ownerId: req.session.user.id,
+        assetType
+      });
+      await removeStoredObjects(models);
+
+      const deletedModels = await deleteOwnedProjectAssets({
         projectId: req.params.id,
         ownerId: req.session.user.id,
         assetType
       });
 
-      await removeStoredObjects(models);
       res.json({
         ok: true,
         deleted: {
           projectId: req.params.id,
           assetType,
-          fileCount: models.length
+          fileCount: deletedModels.length
         }
       });
     } catch (error) {
@@ -709,6 +724,7 @@ export function createRouter() {
         projectId: req.params.id,
         ownerId: req.session.user.id
       });
+      await removeStoredObjects(models);
       await deleteOwnedProjectAssets({
         projectId: req.params.id,
         ownerId: req.session.user.id
@@ -719,7 +735,6 @@ export function createRouter() {
       });
 
       if (!project) return res.status(404).json({ error: "Project was not found for this owner." });
-      await removeStoredObjects(models);
       res.json({
         ok: true,
         deleted: {

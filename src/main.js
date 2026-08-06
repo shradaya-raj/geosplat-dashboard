@@ -1409,6 +1409,14 @@ function getAssetTypeOrder() {
   return Object.keys(ASSET_TYPE_LABELS);
 }
 
+function appendTextElement(parent, tagName, className, text) {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  element.textContent = text;
+  parent.append(element);
+  return element;
+}
+
 function getProjectTypeStats(entry) {
   const stats = new Map();
 
@@ -1478,7 +1486,7 @@ function fillProjectTypeSelect() {
 
   const allOption = document.createElement("option");
   allOption.value = "all";
-  allOption.textContent = "All Gaussian blocks";
+  allOption.textContent = "All viewable files";
   projectTypeSelect.append(allOption);
 
   for (const assetType of getAssetTypeOrder()) {
@@ -1541,10 +1549,8 @@ function renderProjectDataList() {
     header.type = "button";
     header.className = "project-data-type-header";
     header.dataset.active = String(getSelectedAssetType() === assetType);
-    header.innerHTML = `
-      <span>${ASSET_TYPE_LABELS[assetType] || assetType}</span>
-      <small>${approvedCount}/${files.length} approved · ${viewableCount} viewable</small>
-    `;
+    appendTextElement(header, "span", "", ASSET_TYPE_LABELS[assetType] || assetType);
+    appendTextElement(header, "small", "", `${approvedCount}/${files.length} approved · ${viewableCount} viewable`);
     header.addEventListener("click", () => {
       if (projectTypeSelect) projectTypeSelect.value = assetType;
       clearSelectedProjectFiles();
@@ -1564,10 +1570,13 @@ function renderProjectDataList() {
       fileButton.dataset.selected = String(isSelected);
       fileButton.dataset.status = model.status || "published";
       fileButton.disabled = !model.canLoad;
-      fileButton.innerHTML = `
-        <span class="project-file-name">${model.name || model.filename || "Untitled file"}</span>
-        <span class="project-file-meta">${extension || "file"} · ${model.status || "published"}${model.size ? ` · ${formatBytes(model.size)}` : ""}</span>
-      `;
+      appendTextElement(fileButton, "span", "project-file-name", model.name || model.filename || "Untitled file");
+      appendTextElement(
+        fileButton,
+        "span",
+        "project-file-meta",
+        `${extension || "file"} · ${model.status || "published"}${model.size ? ` · ${formatBytes(model.size)}` : ""}`
+      );
       fileButton.addEventListener("click", () => {
         if (projectTypeSelect) projectTypeSelect.value = assetType;
         if (selectedProjectFileIds.has(fileId)) selectedProjectFileIds.delete(fileId);
@@ -1606,10 +1615,8 @@ function renderViewerTypeSwitcher(entry, activeAssetType = "gaussian_splatting")
     button.className = "viewer-type-pill";
     button.dataset.assetType = stat.assetType;
     button.dataset.active = String(stat.assetType === activeAssetType);
-    button.innerHTML = `
-      <span>${stat.label}</span>
-      <small>${stat.approved}/${stat.total}</small>
-    `;
+    appendTextElement(button, "span", "", stat.label);
+    appendTextElement(button, "small", "", `${stat.approved}/${stat.total}`);
     button.addEventListener("click", async () => {
       if (activeViewerAssetType === stat.assetType) return;
       activeViewerAssetType = stat.assetType;
