@@ -74,6 +74,13 @@ const loadSelectedButton = document.querySelector("#load-selected");
 const reloadButton = document.querySelector("#reload-model");
 const frameButton = document.querySelector("#frame-model");
 const pointModeButton = document.querySelector("#point-mode");
+const orthoOrientationPanel = document.querySelector("#ortho-orientation-panel");
+const orthoNorthAngleInput = document.querySelector("#ortho-north-angle");
+const orthoNorthValue = document.querySelector("#ortho-north-value");
+const orthoRotateLeftButton = document.querySelector("#ortho-rotate-left");
+const orthoResetNorthButton = document.querySelector("#ortho-reset-north");
+const orthoRotateRightButton = document.querySelector("#ortho-rotate-right");
+const northIndicator = document.querySelector("#north-indicator");
 const downloadOriginalButton = document.querySelector("#download-original");
 const deleteSelectedButton = document.querySelector("#delete-selected");
 const localModelButton = document.querySelector("#local-model");
@@ -141,6 +148,9 @@ let modelRefreshTimer = null;
 let modelSelectEntries = [];
 let loadedProjectEntry = null;
 let activeViewerAssetType = "gaussian_splatting";
+let orthoNorthDegrees = Number(window.localStorage.getItem("gaussian-viewer-ortho-north-degrees") || 0);
+if (!Number.isFinite(orthoNorthDegrees)) orthoNorthDegrees = 0;
+let loadedOrthoObjects = [];
 const signedViewUrlCache = new Map();
 let selectedProjectFileIds = new Set();
 let notifiedPublishedModelIds = new Set();
@@ -796,6 +806,8 @@ function clearViewerScene() {
   activeModel = null;
   lastFrame = null;
   pointModeEnabled = false;
+  loadedOrthoObjects = [];
+  updateOrthoOrientationUI();
   frameButton.disabled = false;
   pointModeButton.disabled = true;
   refreshDownloadButton();
@@ -880,7 +892,50 @@ function resizeGenericViewer() {
   genericRenderer.setSize(width, height);
 }
 
-function fitGenericCameraToScene() {
+function normalizeDegrees(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return ((((numeric + 180) % 360) + 360) % 360) - 180;
+}
+
+function degreesToRadians(degrees) {
+  return degrees * Math.PI / 180;
+}
+
+function updateNorthIndicator() {
+  if (!northIndicator) return;
+  const show = activeViewerAssetType === "orthomosaic" && loadedOrthoObjects.length > 0;
+  northIndicator.hidden = !show;
+  northIndicator.style.setProperty("--north-rotation", `${-orthoNorthDegrees}deg`);
+  northIndicator.title = `North orientation: ${Math.round(orthoNorthDegrees)}°`;
+}
+
+function updateOrthoOrientationUI() {
+  const show = activeViewerAssetType === "orthomosaic";
+  if (orthoOrientationPanel) orthoOrientationPanel.hidden = !show;
+  if (orthoNorthAngleInput) orthoNorthAngleInput.value = String(Math.round(orthoNorthDegrees));
+  if (orthoNorthValue) orthoNorthValue.textContent = `${Math.round(orthoNorthDegrees)}°`;
+  updateNorthIndicator();
+}
+
+function applyOrthoNorthRotation() {
+  const rotation = degreesToRadians(orthoNorthDegrees);
+  for (const object of loadedOrthoObjects) {
+    object.rotation.z = rotation;
+  }
+  window.localStorage.setItem("gaussian-viewer-ortho-north-degrees", String(Math.round(orthoNorthDegrees)));
+  updateOrthoOrientationUI();
+}
+
+function setOrthoNorthDegrees(value) {
+  orthoNorthDegrees = normalizeDegrees(value);
+  applyOrthoNorthRotation();
+  if (genericRenderer && genericScene && genericCamera) {
+    genericRenderer.render(genericScene, genericCamera);
+  }
+}
+
+function fitGenericCameraToScene(assetType = activeViewerAssetType) {
   if (!genericScene || !genericCamera || !genericControls) return;
   const box = new THREE.Box3().setFromObject(genericScene);
   if (box.isEmpty()) return;
@@ -892,7 +947,11 @@ function fitGenericCameraToScene() {
   const radius = Math.max(size.length() * 0.55, 1);
   const distance = radius / Math.sin((genericCamera.fov * Math.PI / 180) / 2);
 
-  genericCamera.position.copy(center).add(new THREE.Vector3(distance * 0.65, -distance, distance * 0.45));
+  const offset = assetType === "orthomosaic"
+    ? new THREE.Vector3(0, 0, distance * 1.2)
+    : new THREE.Vector3(distance * 0.65, -distance, distance * 0.45);
+
+  genericCamera.position.copy(center).add(offset);
   genericCamera.near = Math.max(distance / 1000, 0.01);
   genericCamera.far = Math.max(distance * 20, 1000);
   genericCamera.lookAt(center);
@@ -905,6 +964,10 @@ function applyCommonObjectStyle(object, model, index, total) {
   object.name = model.name || `Asset ${index + 1}`;
   if (!model.position && total > 1 && model.assetType === "orthomosaic") {
     object.position.x = (index - (total - 1) / 2) * 1.15;
+  }
+  if (model.assetType === "orthomosaic") {
+    object.userData.isOrthomosaic = true;
+    object.rotation.z = degreesToRadians(orthoNorthDegrees);
   }
   return object;
 }
@@ -1085,10 +1148,15 @@ async function loadOrthoObject(model) {
     const aspect = sourceWidth && sourceHeight
       ? sourceWidth / sourceHeight
       : previewSize.width / previewSize.height;
-    return new THREE.Mesh(
+    const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(aspect, 1),
       new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
     );
+    mesh.userData.orthoSourceWidth = sourceWidth;
+    mesh.userData.orthoSourceHeight = sourceHeight;
+    mesh.userData.orthoPreviewWidth = previewSize.width;
+    mesh.userData.orthoPreviewHeight = previewSize.height;
+    return mesh;
   } catch (error) {
     const reason = error?.message || "Convert it to web map tiles or a Cloud Optimized GeoTIFF preview.";
     const fetchHint = /failed to fetch|networkerror|cors/i.test(reason)
@@ -1121,6 +1189,7 @@ function updateModelInfo(model = activeModel, frame = lastFrame) {
       typeLabel
     ];
     if (activeModels.length > 1) infoParts.push(`${activeModels.length} files`);
+    if (activeViewerAssetType === "orthomosaic") infoParts.push(`north ${Math.round(orthoNorthDegrees)}°`);
     modelInfo.textContent = infoParts.join(" · ");
     modelInfo.hidden = false;
     refreshDownloadButton();
@@ -1874,6 +1943,8 @@ function withTimeout(promise, milliseconds, message) {
 async function loadModel(model, sourceUrl = model.path) {
   activeModel = model;
   activeModels = [model];
+  loadedOrthoObjects = [];
+  updateOrthoOrientationUI();
   const loadToken = ++activeLoadToken;
   let sceneVisible = false;
   hideEmptyState();
@@ -1885,6 +1956,8 @@ async function loadModel(model, sourceUrl = model.path) {
   try {
     await loadViewerLibraries();
     resetViewer();
+    loadedOrthoObjects = [];
+    updateOrthoOrientationUI();
     frameButton.disabled = false;
     pointModeButton.disabled = true;
     modelInfo.hidden = true;
@@ -2017,6 +2090,7 @@ async function ensureViewUrlsForModels(selectedModels) {
 
 async function loadGenericDataModels(selectedModels, assetType) {
   activeViewerAssetType = assetType;
+  updateOrthoOrientationUI();
   activeModels = selectedModels;
   activeModel = {
     name: getModelDisplayName(selectedModels),
@@ -2036,6 +2110,8 @@ async function loadGenericDataModels(selectedModels, assetType) {
     await loadGenericViewerLibraries();
     if (loadToken !== activeLoadToken) return;
     setupGenericViewer();
+    loadedOrthoObjects = [];
+    updateOrthoOrientationUI();
     frameButton.disabled = false;
     pointModeButton.disabled = true;
     modelInfo.hidden = true;
@@ -2051,12 +2127,14 @@ async function loadGenericDataModels(selectedModels, assetType) {
       setStatus(`Loading ${typeLabel}`, detail, "loading");
       const object = await loadGenericAssetObject(model, index, selectedModels.length);
       genericScene.add(object);
+      if (object.userData?.isOrthomosaic) loadedOrthoObjects.push(object);
     }
 
     if (loadToken !== activeLoadToken) return;
     setModelLoadProgress(100);
+    applyOrthoNorthRotation();
     resizeGenericViewer();
-    fitGenericCameraToScene();
+    fitGenericCameraToScene(assetType);
     updateModelInfo(activeModel);
     setStatus("Live", `${activeModel.name} • ${typeLabel}`, "ready");
     updateShareUrl(selectedModels);
@@ -2150,6 +2228,8 @@ async function loadSelectedHostedModels() {
   try {
     await loadViewerLibraries();
     resetViewer();
+    loadedOrthoObjects = [];
+    updateOrthoOrientationUI();
     frameButton.disabled = false;
     pointModeButton.disabled = true;
     modelInfo.hidden = true;
@@ -2575,6 +2655,27 @@ frameButton.addEventListener("click", () => {
 
 pointModeButton.addEventListener("click", () => {
   if (!setPointMode(!pointModeEnabled)) showToast("Point mode is not available yet");
+});
+
+orthoNorthAngleInput?.addEventListener("input", () => {
+  setOrthoNorthDegrees(orthoNorthAngleInput.value);
+  updateModelInfo(activeModel);
+});
+
+orthoRotateLeftButton?.addEventListener("click", () => {
+  setOrthoNorthDegrees(orthoNorthDegrees - 5);
+  updateModelInfo(activeModel);
+});
+
+orthoResetNorthButton?.addEventListener("click", () => {
+  setOrthoNorthDegrees(0);
+  updateModelInfo(activeModel);
+  showToast("Orthomosaic reset to north-up.");
+});
+
+orthoRotateRightButton?.addEventListener("click", () => {
+  setOrthoNorthDegrees(orthoNorthDegrees + 5);
+  updateModelInfo(activeModel);
 });
 
 downloadOriginalButton?.addEventListener("click", downloadOriginalModel);

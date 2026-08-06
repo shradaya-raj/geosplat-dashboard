@@ -117,9 +117,25 @@
               <small>Live status</small>
             </div>
             <div id="model-info" class="model-info" hidden></div>
+            <div id="ortho-orientation-panel" class="ortho-orientation-panel" hidden>
+              <div class="orientation-header">
+                <strong>Ortho orientation</strong>
+                <small>North-up rotation</small>
+              </div>
+              <label class="orientation-range">
+                <span>Angle</span>
+                <input id="ortho-north-angle" type="range" min="-180" max="180" step="1" value="0" />
+                <output id="ortho-north-value">0°</output>
+              </label>
+              <div class="orientation-actions">
+                <button id="ortho-rotate-left" class="icon-button" type="button" title="Rotate 5° left">↺</button>
+                <button id="ortho-reset-north" class="icon-button" type="button">North up</button>
+                <button id="ortho-rotate-right" class="icon-button" type="button" title="Rotate 5° right">↻</button>
+              </div>
+            </div>
             <p class="panel-note">
-              Select a ready project to load its Gaussian blocks together. Pending
-              projects remain visible so uploads never feel lost.
+              Select a ready project to load its viewable files. Ortho layers are
+              displayed flat and can be rotated to north.
             </p>
           </section>
         </aside>
@@ -127,6 +143,10 @@
         <section class="viewer-card" aria-label="Interactive Gaussian splat viewer">
           <div id="viewer" class="viewer"></div>
           <div id="viewer-type-switcher" class="viewer-type-switcher" hidden aria-label="Loaded data type switcher"></div>
+          <div id="north-indicator" class="north-indicator" hidden aria-label="North orientation">
+            <span aria-hidden="true">↑</span>
+            <strong>N</strong>
+          </div>
 
           <div id="loading-panel" class="loading-panel">
             <span class="loader"></span>
@@ -312,9 +332,9 @@
                 <small id="upload-progress-label">Waiting</small>
               </div>
               <ol class="upload-steps">
-                <li>Gaussian Splatting files are viewable after approval.</li>
-                <li>Mesh, point cloud, and ortho files are stored in the project for upcoming viewers.</li>
-                <li>Approved Gaussian blocks appear under the project name in the left panel.</li>
+                <li>Gaussian, mesh, point cloud, and GeoTIFF ortho files are viewable after approval when the format is supported.</li>
+                <li>Companion files such as world files or projection files stay attached to the project for processing context.</li>
+                <li>Approved files appear under the project name in the left panel.</li>
               </ol>
             </div>
           </div>

@@ -797,6 +797,55 @@ html[data-state="error"] .live-dot {
   color: var(--ink);
 }
 
+.ortho-orientation-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 44%),
+    color-mix(in srgb, var(--panel-strong) 78%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.ortho-orientation-panel[hidden] {
+  display: none !important;
+}
+
+.orientation-header,
+.orientation-range {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.orientation-header strong,
+.orientation-range span {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.orientation-header small,
+.orientation-range output {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.orientation-range input {
+  flex: 1;
+  accent-color: var(--accent-2);
+}
+
+.orientation-actions {
+  display: grid;
+  grid-template-columns: 0.7fr 1.2fr 0.7fr;
+  gap: 8px;
+}
+
 .viewer-card {
   position: relative;
   contain: layout paint;
@@ -891,6 +940,44 @@ html[data-state="error"] .live-dot {
 
 .viewer-type-pill[data-active="true"] small {
   color: color-mix(in srgb, var(--accent-ink) 70%, transparent);
+}
+
+.north-indicator {
+  position: absolute;
+  z-index: 5;
+  right: 30px;
+  top: 30px;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel-strong) 86%, transparent);
+  backdrop-filter: var(--blur);
+  box-shadow: var(--shadow-sm);
+}
+
+.north-indicator[hidden] {
+  display: none !important;
+}
+
+.north-indicator span {
+  position: absolute;
+  color: var(--accent-2);
+  font-size: 28px;
+  line-height: 1;
+  transform: rotate(var(--north-rotation, 0deg));
+  transform-origin: center;
+  transition: transform 220ms ease;
+}
+
+.north-indicator strong {
+  position: absolute;
+  bottom: 8px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
 }
 
 .viewer canvas {
