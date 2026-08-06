@@ -647,6 +647,95 @@ html[data-state="error"] .live-dot {
   background: var(--panel-solid);
 }
 
+.project-data-list {
+  display: grid;
+  gap: 9px;
+  max-height: 240px;
+  margin-top: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.project-data-list[hidden] {
+  display: none !important;
+}
+
+.project-data-type {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel-solid) 52%, transparent);
+  overflow: hidden;
+}
+
+.project-data-type-header,
+.project-file-row {
+  width: 100%;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-data-type-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 11px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.project-data-type-header small,
+.project-file-meta {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.project-data-type-header[data-active="true"] {
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent-2) 72%, var(--panel-solid)));
+}
+
+.project-data-type-header[data-active="true"] small {
+  color: color-mix(in srgb, var(--accent-ink) 72%, transparent);
+}
+
+.project-file-list {
+  display: grid;
+  gap: 1px;
+  padding: 5px;
+}
+
+.project-file-row {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 12px;
+}
+
+.project-file-row:hover:not(:disabled),
+.project-file-row[data-selected="true"] {
+  background: color-mix(in srgb, var(--accent-2) 15%, var(--panel-solid));
+}
+
+.project-file-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.project-file-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 :root[data-theme="dark"] .select-control select,
 :root[data-theme="dark"] .type-select-control select {
   color: #f4fbf7;
@@ -663,6 +752,15 @@ html[data-state="error"] .live-dot {
 :root[data-theme="dark"] .select-control option:checked {
   color: #06100d;
   background: linear-gradient(135deg, #9cff57, #56dca9);
+}
+
+:root[data-theme="dark"] .project-data-type {
+  background: rgba(16, 23, 21, 0.82);
+}
+
+:root[data-theme="dark"] .project-file-row:hover:not(:disabled),
+:root[data-theme="dark"] .project-file-row[data-selected="true"] {
+  background: rgba(103, 227, 171, 0.16);
 }
 
 .control-grid {

@@ -67,6 +67,7 @@ const viewerElement = document.querySelector("#viewer");
 const modelSelect = document.querySelector("#model-select");
 const projectTypeSelect = document.querySelector("#project-type-select");
 const viewerTypeSwitcher = document.querySelector("#viewer-type-switcher");
+const projectDataList = document.querySelector("#project-data-list");
 const loadSelectedButton = document.querySelector("#load-selected");
 const reloadButton = document.querySelector("#reload-model");
 const frameButton = document.querySelector("#frame-model");
@@ -139,6 +140,7 @@ let modelSelectEntries = [];
 let loadedProjectEntry = null;
 let activeViewerAssetType = "gaussian_splatting";
 const signedViewUrlCache = new Map();
+let selectedProjectFileIds = new Set();
 let notifiedPublishedModelIds = new Set();
 let uploadAwaitingApproval = false;
 
@@ -1404,6 +1406,93 @@ function fillProjectTypeSelect() {
   projectTypeSelect.disabled = false;
 }
 
+function clearSelectedProjectFiles() {
+  selectedProjectFileIds = new Set();
+}
+
+function getModelStableId(model, index) {
+  return model?.id || `${model?.projectId || "project"}:${model?.filename || model?.name || index}`;
+}
+
+function renderProjectDataList() {
+  if (!projectDataList) return;
+
+  const selectedEntries = getSelectedProjectEntries();
+  projectDataList.replaceChildren();
+
+  if (!selectedEntries.length) {
+    projectDataList.hidden = true;
+    return;
+  }
+
+  const selectedIndexes = [...new Set(selectedEntries.flatMap((entry) => entry.indexes))];
+  const grouped = new Map();
+
+  for (const index of selectedIndexes) {
+    const model = models[index];
+    if (!model) continue;
+    const assetType = model.assetType || "gaussian_splatting";
+    if (!grouped.has(assetType)) grouped.set(assetType, []);
+    grouped.get(assetType).push({ model, index });
+  }
+
+  for (const assetType of getAssetTypeOrder()) {
+    const files = grouped.get(assetType) || [];
+    if (!files.length) continue;
+
+    const typeCard = document.createElement("section");
+    typeCard.className = "project-data-type";
+    typeCard.dataset.assetType = assetType;
+
+    const approvedCount = files.filter(({ model }) => model.status === "published").length;
+    const viewableCount = files.filter(({ model }) => model.canLoad).length;
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "project-data-type-header";
+    header.dataset.active = String(getSelectedAssetType() === assetType);
+    header.innerHTML = `
+      <span>${ASSET_TYPE_LABELS[assetType] || assetType}</span>
+      <small>${approvedCount}/${files.length} approved · ${viewableCount} viewable</small>
+    `;
+    header.addEventListener("click", () => {
+      if (projectTypeSelect) projectTypeSelect.value = assetType;
+      clearSelectedProjectFiles();
+      renderProjectDataList();
+    });
+
+    const list = document.createElement("div");
+    list.className = "project-file-list";
+
+    for (const { model, index } of files) {
+      const fileId = getModelStableId(model, index);
+      const extension = getFileExtension(model.filename || model.name || "");
+      const isSelected = selectedProjectFileIds.has(fileId);
+      const fileButton = document.createElement("button");
+      fileButton.type = "button";
+      fileButton.className = "project-file-row";
+      fileButton.dataset.selected = String(isSelected);
+      fileButton.dataset.status = model.status || "published";
+      fileButton.disabled = !model.canLoad;
+      fileButton.innerHTML = `
+        <span class="project-file-name">${model.name || model.filename || "Untitled file"}</span>
+        <span class="project-file-meta">${extension || "file"} · ${model.status || "published"}${model.size ? ` · ${formatBytes(model.size)}` : ""}</span>
+      `;
+      fileButton.addEventListener("click", () => {
+        if (projectTypeSelect) projectTypeSelect.value = assetType;
+        if (selectedProjectFileIds.has(fileId)) selectedProjectFileIds.delete(fileId);
+        else selectedProjectFileIds.add(fileId);
+        renderProjectDataList();
+      });
+      list.append(fileButton);
+    }
+
+    typeCard.append(header, list);
+    projectDataList.append(typeCard);
+  }
+
+  projectDataList.hidden = projectDataList.childElementCount === 0;
+}
+
 function hideViewerTypeSwitcher() {
   if (!viewerTypeSwitcher) return;
   viewerTypeSwitcher.hidden = true;
@@ -1458,6 +1547,7 @@ function fillModelSelect() {
     pointModeButton.disabled = true;
     if (deleteSelectedButton) deleteSelectedButton.disabled = true;
     fillProjectTypeSelect();
+    renderProjectDataList();
     return;
   }
 
@@ -1495,6 +1585,7 @@ function fillModelSelect() {
   pointModeButton.disabled = true;
   if (deleteSelectedButton) deleteSelectedButton.disabled = true;
   fillProjectTypeSelect();
+  renderProjectDataList();
 }
 
 function modelsChanged(nextModels) {
@@ -1568,6 +1659,7 @@ function startModelRefreshPolling() {
 }
 
 function getSelectedModelIndexes() {
+  const selectedFileIds = selectedProjectFileIds;
   const selectedAssetType = getSelectedAssetType();
   return [...modelSelect.selectedOptions]
     .map((option) => Number(option.value))
@@ -1575,8 +1667,9 @@ function getSelectedModelIndexes() {
     .flatMap((entryIndex) => modelSelectEntries[entryIndex].indexes)
     .filter((index) => {
       const model = models[index];
+      if (!model) return false;
+      if (selectedFileIds.size) return selectedFileIds.has(getModelStableId(model, index));
       return Number.isInteger(index)
-        && model
         && (selectedAssetType === "all" || model.assetType === selectedAssetType);
     });
 }
@@ -1867,9 +1960,14 @@ async function loadSelectedHostedModels() {
   const selectedEntry = getCombinedSelectedProjectEntry();
   const selectedAssetType = getSelectedAssetType();
   const indexes = getSelectedModelIndexes();
-  const renderAssetType = selectedAssetType === "all" ? "gaussian_splatting" : selectedAssetType;
+  const hasSpecificFileSelection = selectedProjectFileIds.size > 0;
+  const firstSelectedModel = indexes.map((index) => models[index]).find(Boolean);
+  const renderAssetType = hasSpecificFileSelection
+    ? (firstSelectedModel?.assetType || "gaussian_splatting")
+    : (selectedAssetType === "all" ? "gaussian_splatting" : selectedAssetType);
   const typedIndexes = indexes.filter((index) => {
     const model = models[index];
+    if (hasSpecificFileSelection) return true;
     return selectedAssetType === "all"
       ? model?.assetType === "gaussian_splatting"
       : model?.assetType === selectedAssetType;
@@ -1893,7 +1991,7 @@ async function loadSelectedHostedModels() {
     } else if (hasTypedFiles) {
       showToast(`${typeLabel} has no approved viewable files yet.`);
     } else {
-      showToast(`This project has no ${typeLabel} files.`);
+      showToast(hasSpecificFileSelection ? "Selected files are not viewable yet." : `This project has no ${typeLabel} files.`);
     }
     return;
   }
@@ -2305,7 +2403,9 @@ async function deleteSelectedHostedFiles() {
 }
 
 modelSelect.addEventListener("change", () => {
+  clearSelectedProjectFiles();
   fillProjectTypeSelect();
+  renderProjectDataList();
 
   if (deleteSelectedButton) {
     deleteSelectedButton.disabled = !getSelectedProjectEntries().length
@@ -2319,6 +2419,9 @@ modelSelect.addEventListener("change", () => {
 });
 
 projectTypeSelect?.addEventListener("change", () => {
+  clearSelectedProjectFiles();
+  renderProjectDataList();
+
   if (deleteSelectedButton) {
     deleteSelectedButton.disabled = !getSelectedProjectEntries().length
       || !currentSession.authenticated
